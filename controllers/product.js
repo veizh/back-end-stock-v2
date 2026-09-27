@@ -1,4 +1,5 @@
 const Product = require("../models/product");
+const Ticket = require("../models/ticket");
 
 const generateTransitRef = () => {
   return `TR-${Date.now().toString(36).toUpperCase()}`;
@@ -161,7 +162,170 @@ const sendToSite = async (req, res) => {
     });
   }
 };
+const returnTransit = async (req, res) => {
+  try {
+    const { ref, transitRef } = req.params;
+    const { quantity } = req.body;
 
+    // =========================
+    // VALIDATION
+    // =========================
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      return res.status(400).json({
+        message: "La quantité doit être un entier supérieur à 0",
+      });
+    }
+
+    // =========================
+    // RECHERCHE DU PRODUIT
+    // =========================
+
+    const product = await Product.findOne({
+      ref,
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Produit introuvable",
+      });
+    }
+
+    // =========================
+    // RECHERCHE DU TRANSIT
+    // =========================
+
+    const transitIndex = product.enTransit.findIndex(
+      (transit) => transit.ref === transitRef
+    );
+
+    if (transitIndex === -1) {
+      return res.status(404).json({
+        message: "Transit introuvable",
+        transitRef,
+      });
+    }
+
+    const transit = product.enTransit[transitIndex];
+
+    // =========================
+    // VÉRIFICATION QUANTITÉ
+    // =========================
+
+    if (quantity > transit.quantity) {
+      return res.status(400).json({
+        message: "La quantité retournée dépasse la quantité en transit",
+        quantityEnTransit: transit.quantity,
+        quantityDemandee: quantity,
+      });
+    }
+
+    // =========================
+    // ANCIENNES VALEURS
+    // =========================
+
+    const oldStock = product.quantity;
+    const oldTransitQuantity = transit.quantity;
+
+    // =========================
+    // RETOUR EN STOCK
+    // =========================
+
+    product.quantity += quantity;
+
+    // =========================
+    // MODIFICATION DU TRANSIT
+    // =========================
+
+    if (quantity === transit.quantity) {
+      // Retour complet
+      product.enTransit.splice(transitIndex, 1);
+    } else {
+      // Retour partiel
+      transit.quantity -= quantity;
+    }
+
+    const newStock = product.quantity;
+
+    const newTransitQuantity =
+      quantity === oldTransitQuantity
+        ? 0
+        : transit.quantity;
+
+    // =========================
+    // SAUVEGARDE PRODUIT
+    // =========================
+
+    await product.save();
+
+    // =========================
+    // CRÉATION DU TICKET
+    // =========================
+
+    const ticket = await Ticket.create({
+      type: "TRANSIT_RETURN",
+
+      productRef: product.ref,
+
+      productName: product.name,
+
+      transitRef: transit.ref,
+
+      site: transit.site,
+
+      quantity,
+
+      oldStock,
+
+      newStock,
+
+      oldTransitQuantity,
+
+      newTransitQuantity,
+
+      action:
+        quantity === oldTransitQuantity
+          ? "Retour complet du transit vers l'entrepôt"
+          : "Retour partiel du transit vers l'entrepôt",
+    });
+
+    // =========================
+    // RÉPONSE
+    // =========================
+
+    res.json({
+      message:
+        quantity === oldTransitQuantity
+          ? "Transit retourné entièrement en stock"
+          : "Une partie du transit a été retournée en stock",
+
+      product,
+
+      transitRef,
+
+      site: transit.site,
+
+      returnedQuantity: quantity,
+
+      oldStock,
+
+      newStock,
+
+      oldTransitQuantity,
+
+      newTransitQuantity,
+
+      ticket,
+    });
+  } catch (error) {
+    console.error("Erreur retour transit :", error);
+
+    res.status(500).json({
+      message:
+        "Erreur lors du retour du transit en stock",
+    });
+  }
+};
 const updateProduct = async (req, res) => {
   try {
     const { name, ref, quantity, location, enTransit } = req.body;
@@ -377,6 +541,7 @@ const createProduct = async (req, res) => {
 module.exports = {
   getProducts,
   getProduct,
+  returnTransit,
   createProduct,
   addStock,
   deleteTransit,

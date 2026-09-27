@@ -5,10 +5,11 @@ const {
   getProduct,
   createProduct,
   addStock,
-  updateProduct,
-  removeStock,
-  sendToSite,
   deleteTransit,
+  removeStock,
+  updateProduct,
+  sendToSite,
+  returnTransit,
 } = require("../controllers/product");
 
 const router = express.Router();
@@ -20,5 +21,6 @@ router.post("/create", createProduct);
 router.delete("/:ref/transit/:transitRef", deleteTransit);
 router.post("/:ref/add", addStock);
 router.post("/:ref/remove", removeStock);
+router.post( "/products/:ref/transit/:transitRef/return",returnTransit);
 
 module.exports = router;
