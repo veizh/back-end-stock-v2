@@ -21,6 +21,6 @@ router.post("/create", createProduct);
 router.delete("/:ref/transit/:transitRef", deleteTransit);
 router.post("/:ref/add", addStock);
 router.post("/:ref/remove", removeStock);
-router.post( "/products/:ref/transit/:transitRef/return",returnTransit);
+router.post("/:ref/transit/:transitRef/return", returnTransit);
 
 module.exports = router;
