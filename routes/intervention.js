@@ -6,52 +6,25 @@ const {
   createIntervention,
   updateIntervention,
   closeIntervention,
+  getInterventionProducts,
+  getInterventionProduct,
   getInterventionTickets,
-  transferProduct,getinterventionsProducts,
+  transferProduct,
 } = require("../controllers/product");
 
 const router = express.Router();
 
-/*
- * GET /interventions
- * Liste toutes les interventions
- */
-router.get("/", getInterventions);
+router.get("/:ref/products", getInterventionProducts);
+router.get("/:ref/products/:productRef", getInterventionProduct);
+router.get("/:ref/tickets", getInterventionTickets);
 
-/*
- * GET /interventions/:ref
- * Récupère une intervention par sa ref
- */
-router.get("/:ref", getIntervention);
-
-/*
- * POST /interventions/create
- * Crée une nouvelle intervention
- */
-router.post("/create", createIntervention);
-
-/*
- * PUT /interventions/:ref
- * Modifie une intervention
- */
-router.put("/:ref", updateIntervention);
-
-/*
- * PATCH /interventions/:ref/close
- * Clôture une intervention
- */
-router.patch("/:ref/close", closeIntervention);
-router.get("/:ref/products",getinterventionsProducts);
-/*
- * POST /interventions/:ref/transfer
- * Transfère du matériel vers une autre intervention
- */
 router.post("/:ref/transfer", transferProduct);
 
-/*
- * GET /interventions/:ref/tickets
- * Récupère tous les tickets liés à cette intervention
- */
-router.get("/:ref/tickets", getInterventionTickets);
+router.get("/:ref", getIntervention);
+router.post("/create", createIntervention);
+router.put("/:ref", updateIntervention);
+router.patch("/:ref/close", closeIntervention);
+
+router.get("/", getInterventions);
 
 module.exports = router;

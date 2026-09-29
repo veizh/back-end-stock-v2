@@ -3,14 +3,6 @@ const Ticket = require("../models/ticket");
 const Intervention = require("../models/intervention");
 
 /* =========================================================
-   HELPERS
-========================================================= */
-
-const generateTransitRef = () => {
-  return `TR-${Date.now().toString(36).toUpperCase()}`;
-};
-
-/* =========================================================
    INTERVENTIONS
 ========================================================= */
 
@@ -32,7 +24,8 @@ const getInterventions = async (req, res) => {
     );
 
     res.status(500).json({
-      message: "Erreur lors de la récupération des interventions",
+      message:
+        "Erreur lors de la récupération des interventions",
     });
   }
 };
@@ -62,13 +55,14 @@ const getIntervention = async (req, res) => {
     );
 
     res.status(500).json({
-      message: "Erreur lors de la récupération de l'intervention",
+      message:
+        "Erreur lors de la récupération de l'intervention",
     });
   }
 };
 
 /**
- * POST /interventions
+ * POST /interventions/create
  *
  * Création d'une intervention.
  */
@@ -84,7 +78,13 @@ const createIntervention = async (req, res) => {
       status,
     } = req.body;
 
-    if (!ref || !name || !client || !site || !address) {
+    if (
+      !ref ||
+      !name ||
+      !client ||
+      !site ||
+      !address
+    ) {
       return res.status(400).json({
         message:
           "ref, name, client, site et address sont obligatoires",
@@ -96,19 +96,21 @@ const createIntervention = async (req, res) => {
 
     if (existingIntervention) {
       return res.status(409).json({
-        message: "Cette référence d'intervention existe déjà",
+        message:
+          "Cette référence d'intervention existe déjà",
       });
     }
 
-    const intervention = await Intervention.create({
-      ref,
-      name,
-      client,
-      site,
-      address,
-      quoteNumber: quoteNumber || null,
-      status: status || "open",
-    });
+    const intervention =
+      await Intervention.create({
+        ref,
+        name,
+        client,
+        site,
+        address,
+        quoteNumber: quoteNumber || null,
+        status: status || "open",
+      });
 
     res.status(201).json(intervention);
   } catch (error) {
@@ -119,12 +121,14 @@ const createIntervention = async (req, res) => {
 
     if (error.code === 11000) {
       return res.status(409).json({
-        message: "Cette référence d'intervention existe déjà",
+        message:
+          "Cette référence d'intervention existe déjà",
       });
     }
 
     res.status(500).json({
-      message: "Erreur lors de la création de l'intervention",
+      message:
+        "Erreur lors de la création de l'intervention",
     });
   }
 };
@@ -136,9 +140,10 @@ const createIntervention = async (req, res) => {
  */
 const updateIntervention = async (req, res) => {
   try {
-    const intervention = await Intervention.findOne({
-      ref: req.params.ref,
-    });
+    const intervention =
+      await Intervention.findOne({
+        ref: req.params.ref,
+      });
 
     if (!intervention) {
       return res.status(404).json({
@@ -204,7 +209,8 @@ const updateIntervention = async (req, res) => {
     await intervention.save();
 
     res.json({
-      message: "Intervention modifiée avec succès",
+      message:
+        "Intervention modifiée avec succès",
       intervention,
     });
   } catch (error) {
@@ -227,9 +233,10 @@ const updateIntervention = async (req, res) => {
  */
 const closeIntervention = async (req, res) => {
   try {
-    const intervention = await Intervention.findOne({
-      ref: req.params.ref,
-    });
+    const intervention =
+      await Intervention.findOne({
+        ref: req.params.ref,
+      });
 
     if (!intervention) {
       return res.status(404).json({
@@ -239,7 +246,8 @@ const closeIntervention = async (req, res) => {
 
     if (intervention.status === "closed") {
       return res.status(400).json({
-        message: "Cette intervention est déjà clôturée",
+        message:
+          "Cette intervention est déjà clôturée",
       });
     }
 
@@ -248,7 +256,8 @@ const closeIntervention = async (req, res) => {
     await intervention.save();
 
     res.json({
-      message: "Intervention clôturée avec succès",
+      message:
+        "Intervention clôturée avec succès",
       intervention,
     });
   } catch (error) {
@@ -271,9 +280,10 @@ const closeIntervention = async (req, res) => {
  */
 const deleteIntervention = async (req, res) => {
   try {
-    const intervention = await Intervention.findOneAndDelete({
-      ref: req.params.ref,
-    });
+    const intervention =
+      await Intervention.findOneAndDelete({
+        ref: req.params.ref,
+      });
 
     if (!intervention) {
       return res.status(404).json({
@@ -282,7 +292,8 @@ const deleteIntervention = async (req, res) => {
     }
 
     res.json({
-      message: "Intervention supprimée avec succès",
+      message:
+        "Intervention supprimée avec succès",
       intervention,
     });
   } catch (error) {
@@ -303,36 +314,73 @@ const deleteIntervention = async (req, res) => {
 ========================================================= */
 
 /**
- * GET /interventions/:ref/items
+ * GET /interventions/:ref/products
  *
- * Récupère tout le matériel présent sur le site
- * de l'intervention.
+ * Récupère tout le matériel présent sur une intervention.
  *
- * On utilise intervention.site pour faire le lien
- * avec Product.location.
+ * Product.enTransit :
+ *
+ * {
+ *   interventionRef: "INT-2026-001",
+ *   quantity: 5
+ * }
  */
 const getInterventionProducts = async (req, res) => {
   try {
-    const intervention = await Intervention.findOne({
-      ref: req.params.ref,
-    });
+    const interventionRef = req.params.ref;
+
+    const intervention =
+      await Intervention.findOne({
+        ref: interventionRef,
+      });
 
     if (!intervention) {
       return res.status(404).json({
-        message: "Intervention introuvable",
+        message:
+          "Intervention introuvable",
       });
     }
 
     const products = await Product.find({
-      location: intervention.site,
+      "enTransit.interventionRef":
+        intervention.ref,
     }).sort({ ref: 1 });
+
+    const interventionProducts =
+      products
+        .map((product) => {
+          const transit =
+            product.enTransit.find(
+              (item) =>
+                item.interventionRef ===
+                intervention.ref
+            );
+
+          if (
+            !transit ||
+            transit.quantity <= 0
+          ) {
+            return null;
+          }
+
+          return {
+            ref: product.ref,
+            name: product.name,
+            quantity: transit.quantity,
+          };
+        })
+        .filter(Boolean);
 
     res.json({
       intervention: {
         ref: intervention.ref,
+        name: intervention.name,
+        client: intervention.client,
         site: intervention.site,
       },
-      products,
+
+      products:
+        interventionProducts,
     });
   } catch (error) {
     console.error(
@@ -348,39 +396,129 @@ const getInterventionProducts = async (req, res) => {
 };
 
 /**
- * GET /interventions/:ref/tickets
+ * GET /interventions/:ref/products/:productRef
  *
- * Récupère tous les tickets liés à l'intervention.
- *
- * Un ticket est lié si :
- *
- * from === intervention.ref
- *
- * OU
- *
- * to === intervention.ref
+ * Récupère un produit précis sur une intervention.
  */
-const getInterventionTickets = async (req, res) => {
+const getInterventionProduct = async (
+  req,
+  res
+) => {
   try {
-    const interventionRef = req.params.ref;
+    const {
+      ref,
+      productRef,
+    } = req.params;
 
-    const intervention = await Intervention.findOne({
-      ref: interventionRef,
-    });
+    const intervention =
+      await Intervention.findOne({
+        ref,
+      });
 
     if (!intervention) {
       return res.status(404).json({
-        message: "Intervention introuvable",
+        message:
+          "Intervention introuvable",
       });
     }
 
-    const tickets = await Ticket.find({
-      $or: [
-        { interventionRef: intervention.ref },
-        { from: intervention.ref },
-        { to: intervention.ref },
-      ],
-    }).sort({ createdAt: -1 });
+    const product =
+      await Product.findOne({
+        ref: productRef,
+      });
+
+    if (!product) {
+      return res.status(404).json({
+        message:
+          "Produit introuvable",
+      });
+    }
+
+    const transit =
+      product.enTransit.find(
+        (item) =>
+          item.interventionRef ===
+          intervention.ref
+      );
+
+    if (!transit || transit.quantity <= 0) {
+      return res.status(404).json({
+        message:
+          "Produit absent de cette intervention",
+        productRef,
+        interventionRef:
+          intervention.ref,
+      });
+    }
+
+    res.json({
+      intervention: {
+        ref: intervention.ref,
+        name: intervention.name,
+        site: intervention.site,
+      },
+
+      product: {
+        ref: product.ref,
+        name: product.name,
+        quantity: transit.quantity,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Erreur récupération produit intervention :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la récupération du produit de l'intervention",
+    });
+  }
+};
+
+/* =========================================================
+   TICKETS D'UNE INTERVENTION
+========================================================= */
+
+/**
+ * GET /interventions/:ref/tickets
+ *
+ * Récupère tous les tickets liés à l'intervention.
+ */
+const getInterventionTickets = async (
+  req,
+  res
+) => {
+  try {
+    const interventionRef =
+      req.params.ref;
+
+    const intervention =
+      await Intervention.findOne({
+        ref: interventionRef,
+      });
+
+    if (!intervention) {
+      return res.status(404).json({
+        message:
+          "Intervention introuvable",
+      });
+    }
+
+    const tickets =
+      await Ticket.find({
+        $or: [
+          {
+            from: intervention.ref,
+          },
+          {
+            to: intervention.ref,
+          },
+        ],
+      }).sort({
+        createdAt: -1,
+      });
 
     res.json({
       intervention: {
@@ -389,6 +527,7 @@ const getInterventionTickets = async (req, res) => {
         client: intervention.client,
         site: intervention.site,
       },
+
       tickets,
     });
   } catch (error) {
@@ -414,27 +553,22 @@ const getInterventionTickets = async (req, res) => {
  * Body :
  *
  * {
- *   "to": "INT-2026-002",
- *   "productRef": "P001",
- *   "quantity": 3
+ *   "to": "INT-2026-003",
+ *   "productRef": "P002",
+ *   "quantity": 2
  * }
  *
- * Le produit est recherché avec :
+ * Déplace une quantité de matériel :
  *
- * product.ref = productRef
- * product.location = site de l'intervention source
- *
- * Puis :
- *
- * source.quantity -= quantity
- *
- * destination.quantity += quantity
- *
- * Et création d'un ticket SITE_TRANSFER.
+ * INT-001 -> INT-003
  */
-const transferProduct = async (req, res) => {
+const transferProduct = async (
+  req,
+  res
+) => {
   try {
-    const fromRef = req.params.ref;
+    const fromRef =
+      req.params.ref;
 
     const {
       to,
@@ -478,7 +612,7 @@ const transferProduct = async (req, res) => {
     }
 
     /* =========================
-       INTERVENTION SOURCE
+       SOURCE
     ========================= */
 
     const fromIntervention =
@@ -494,7 +628,7 @@ const transferProduct = async (req, res) => {
     }
 
     /* =========================
-       INTERVENTION DESTINATION
+       DESTINATION
     ========================= */
 
     const toIntervention =
@@ -513,14 +647,20 @@ const transferProduct = async (req, res) => {
        STATUTS
     ========================= */
 
-    if (fromIntervention.status !== "open") {
+    if (
+      fromIntervention.status !==
+      "open"
+    ) {
       return res.status(400).json({
         message:
           "Impossible de transférer depuis une intervention clôturée",
       });
     }
 
-    if (toIntervention.status !== "open") {
+    if (
+      toIntervention.status !==
+      "open"
+    ) {
       return res.status(400).json({
         message:
           "Impossible de transférer vers une intervention clôturée",
@@ -531,106 +671,104 @@ const transferProduct = async (req, res) => {
        PRODUIT
     ========================= */
 
-    const product = await Product.findOne({
-      ref: productRef,
-    });
+    const product =
+      await Product.findOne({
+        ref: productRef,
+      });
 
     if (!product) {
       return res.status(404).json({
-        message: "Produit introuvable",
+        message:
+          "Produit introuvable",
       });
     }
 
     /* =========================
-       STOCK DISPONIBLE SUR
-       L'INTERVENTION SOURCE
+       STOCK SOURCE
     ========================= */
 
-    const sourceSite =
-      fromIntervention.site;
-
-    const destinationSite =
-      toIntervention.site;
-
     const sourceTransit =
-      product.enTransit.filter(
-        (transit) =>
-          transit.site === sourceSite
+      product.enTransit.find(
+        (item) =>
+          item.interventionRef ===
+          fromIntervention.ref
       );
 
-    const stockSurSite =
-      sourceTransit.reduce(
-        (total, transit) =>
-          total + transit.quantity,
-        0
-      );
+    const sourceQuantity =
+      sourceTransit
+        ? sourceTransit.quantity
+        : 0;
 
-    if (quantity > stockSurSite) {
+    if (
+      quantity >
+      sourceQuantity
+    ) {
       return res.status(400).json({
         message:
           "Stock insuffisant sur l'intervention source",
-        stockDisponible: stockSurSite,
-        quantityDemandee: quantity,
-        site: sourceSite,
+
+        stockDisponible:
+          sourceQuantity,
+
+        quantityDemandee:
+          quantity,
+
+        intervention:
+          fromIntervention.ref,
       });
     }
 
     /* =========================
-       RETRAIT DU SITE SOURCE
+       RETRAIT SOURCE
     ========================= */
 
-    let remaining =
+    sourceTransit.quantity -=
       quantity;
 
-    for (
-      let i = 0;
-      i < product.enTransit.length &&
-      remaining > 0;
-      i++
-    ) {
-      const transit =
-        product.enTransit[i];
+    /* =========================
+       DESTINATION
+    ========================= */
 
-      if (
-        transit.site !== sourceSite ||
-        transit.quantity <= 0
-      ) {
-        continue;
-      }
+    let destinationTransit =
+      product.enTransit.find(
+        (item) =>
+          item.interventionRef ===
+          toIntervention.ref
+      );
 
-      const removeQuantity =
-        Math.min(
-          transit.quantity,
-          remaining
-        );
+    const oldDestinationQuantity =
+      destinationTransit
+        ? destinationTransit.quantity
+        : 0;
 
-      transit.quantity -=
-        removeQuantity;
+    if (destinationTransit) {
+      destinationTransit.quantity +=
+        quantity;
+    } else {
+      destinationTransit = {
+        interventionRef:
+          toIntervention.ref,
+        quantity,
+      };
 
-      remaining -=
-        removeQuantity;
+      product.enTransit.push(
+        destinationTransit
+      );
     }
 
+    const newDestinationQuantity =
+      oldDestinationQuantity +
+      quantity;
+
     /* =========================
-       SUPPRESSION DES TRANSITS
-       VIDES
+       SUPPRESSION DES LIGNES VIDES
     ========================= */
 
     product.enTransit =
       product.enTransit.filter(
-        (transit) =>
-          transit.quantity > 0
+        (item) =>
+          item.quantity > 0
       );
-
-    /* =========================
-       AJOUT AU SITE DESTINATION
-    ========================= */
-
-    product.enTransit.push({
-      ref: generateTransitRef(),
-      quantity,
-      site: destinationSite,
-    });
 
     await product.save();
 
@@ -638,54 +776,83 @@ const transferProduct = async (req, res) => {
        TICKET
     ========================= */
 
-    const ticket = await Ticket.create({
-      type: "SITE_TRANSFER",
+    const ticket =
+      await Ticket.create({
+        type: "SITE_TRANSFER",
 
-      productRef: product.ref,
+        productRef:
+          product.ref,
 
-      productName: product.name,
+        productName:
+          product.name,
 
-      from: fromIntervention.ref,
+        from:
+          fromIntervention.ref,
 
-      to: toIntervention.ref,
+        to:
+          toIntervention.ref,
 
-      site: destinationSite,
+        quantity,
 
-      quantity,
+        site:
+          toIntervention.site,
 
-      action:
-        "Transfert de matériel entre interventions",
-    });
+        oldTransitQuantity:
+          sourceQuantity,
 
-    /* =========================
-       RÉPONSE
-    ========================= */
+        newTransitQuantity:
+          sourceQuantity -
+          quantity,
+
+        destinationOldQuantity:
+          oldDestinationQuantity,
+
+        destinationNewQuantity:
+          newDestinationQuantity,
+
+        action:
+          "Transfert de matériel entre interventions",
+      });
 
     res.json({
       message:
         "Transfert effectué avec succès",
 
-      productRef: product.ref,
+      product: {
+        ref: product.ref,
+        name: product.name,
+      },
 
       from: {
         intervention:
           fromIntervention.ref,
-        site: sourceSite,
-        quantityTransferred:
+
+        site:
+          fromIntervention.site,
+
+        oldQuantity:
+          sourceQuantity,
+
+        newQuantity:
+          sourceQuantity -
           quantity,
       },
 
       to: {
         intervention:
           toIntervention.ref,
-        site: destinationSite,
-        quantityReceived:
-          quantity,
+
+        site:
+          toIntervention.site,
+
+        oldQuantity:
+          oldDestinationQuantity,
+
+        newQuantity:
+          newDestinationQuantity,
       },
 
       ticket,
-
-      product,
     });
   } catch (error) {
     console.error(
@@ -699,17 +866,23 @@ const transferProduct = async (req, res) => {
     });
   }
 };
+
 /* =========================================================
-   PRODUITS / STOCK
+   PRODUITS
 ========================================================= */
 
 /**
  * GET /products
  */
-const getProducts = async (req, res) => {
+const getProducts = async (
+  req,
+  res
+) => {
   try {
-    const products = await Product.find()
-      .sort({ ref: 1 });
+    const products =
+      await Product.find().sort({
+        ref: 1,
+      });
 
     res.json(products);
   } catch (error) {
@@ -725,15 +898,20 @@ const getProducts = async (req, res) => {
 /**
  * GET /products/:ref
  */
-const getProduct = async (req, res) => {
+const getProduct = async (
+  req,
+  res
+) => {
   try {
-    const product = await Product.findOne({
-      ref: req.params.ref,
-    });
+    const product =
+      await Product.findOne({
+        ref: req.params.ref,
+      });
 
     if (!product) {
       return res.status(404).json({
-        message: "Produit introuvable",
+        message:
+          "Produit introuvable",
       });
     }
 
@@ -751,7 +929,10 @@ const getProduct = async (req, res) => {
 /**
  * POST /products
  */
-const createProduct = async (req, res) => {
+const createProduct = async (
+  req,
+  res
+) => {
   try {
     const {
       ref,
@@ -761,13 +942,15 @@ const createProduct = async (req, res) => {
       enTransit,
     } = req.body;
 
-    const product = await Product.create({
-      ref,
-      name,
-      quantity,
-      location,
-      enTransit,
-    });
+    const product =
+      await Product.create({
+        ref,
+        name,
+        quantity,
+        location,
+        enTransit:
+          enTransit || [],
+      });
 
     res.status(201).json(product);
   } catch (error) {
@@ -790,7 +973,10 @@ const createProduct = async (req, res) => {
 /**
  * PUT /products/:ref
  */
-const updateProduct = async (req, res) => {
+const updateProduct = async (
+  req,
+  res
+) => {
   try {
     const {
       name,
@@ -800,13 +986,15 @@ const updateProduct = async (req, res) => {
       enTransit,
     } = req.body;
 
-    const product = await Product.findOne({
-      ref: req.params.ref,
-    });
+    const product =
+      await Product.findOne({
+        ref: req.params.ref,
+      });
 
     if (!product) {
       return res.status(404).json({
-        message: "Produit introuvable",
+        message:
+          "Produit introuvable",
       });
     }
 
@@ -818,9 +1006,14 @@ const updateProduct = async (req, res) => {
       enTransit: product.enTransit,
     };
 
-    if (ref && ref !== product.ref) {
+    if (
+      ref &&
+      ref !== product.ref
+    ) {
       const existingProduct =
-        await Product.findOne({ ref });
+        await Product.findOne({
+          ref,
+        });
 
       if (existingProduct) {
         return res.status(409).json({
@@ -839,15 +1032,18 @@ const updateProduct = async (req, res) => {
     }
 
     if (quantity !== undefined) {
-      product.quantity = quantity;
+      product.quantity =
+        quantity;
     }
 
     if (location !== undefined) {
-      product.location = location;
+      product.location =
+        location;
     }
 
     if (enTransit !== undefined) {
-      product.enTransit = enTransit;
+      product.enTransit =
+        enTransit;
     }
 
     await product.save();
@@ -855,8 +1051,11 @@ const updateProduct = async (req, res) => {
     res.json({
       message:
         "Produit modifié avec succès",
+
       oldProduct,
-      newProduct: product,
+
+      newProduct:
+        product,
     });
   } catch (error) {
     console.error(error);
@@ -868,15 +1067,25 @@ const updateProduct = async (req, res) => {
   }
 };
 
+/* =========================================================
+   STOCK CENTRAL
+========================================================= */
+
 /**
  * POST /products/:ref/add
  */
-const addStock = async (req, res) => {
+const addStock = async (
+  req,
+  res
+) => {
   try {
-    const { quantity } = req.body;
+    const { quantity } =
+      req.body;
 
     if (
-      !Number.isInteger(quantity) ||
+      !Number.isInteger(
+        quantity
+      ) ||
       quantity <= 0
     ) {
       return res.status(400).json({
@@ -885,42 +1094,54 @@ const addStock = async (req, res) => {
       });
     }
 
-    const product = await Product.findOne({
-      ref: req.params.ref,
-    });
+    const product =
+      await Product.findOne({
+        ref: req.params.ref,
+      });
 
     if (!product) {
       return res.status(404).json({
-        message: "Produit introuvable",
+        message:
+          "Produit introuvable",
       });
     }
 
-    const oldQuantity = product.quantity;
+    const oldQuantity =
+      product.quantity;
 
-    product.quantity += quantity;
+    product.quantity +=
+      quantity;
 
     await product.save();
 
-    /*
-     * Ticket historique du mouvement.
-     */
-    const ticket = await Ticket.create({
-      type: "STOCK_ADD",
+    const ticket =
+      await Ticket.create({
+        type: "STOCK_ADD",
 
-      productRef: product.ref,
+        productRef:
+          product.ref,
 
-      productName: product.name,
+        productName:
+          product.name,
 
-      site: product.location,
+        site:
+          product.location,
 
-      quantity,
+        quantity,
 
-      oldStock: oldQuantity,
+        oldStock:
+          oldQuantity,
 
-      newStock: product.quantity,
+        newStock:
+          product.quantity,
 
-      action: "Ajout de stock",
-    });
+        from: "STOCK",
+
+        to: "STOCK",
+
+        action:
+          "Ajout de stock",
+      });
 
     res.json({
       message:
@@ -928,11 +1149,13 @@ const addStock = async (req, res) => {
 
       ref: product.ref,
 
-      addedQuantity: quantity,
+      addedQuantity:
+        quantity,
 
       oldQuantity,
 
-      newQuantity: product.quantity,
+      newQuantity:
+        product.quantity,
 
       product,
 
@@ -951,12 +1174,18 @@ const addStock = async (req, res) => {
 /**
  * POST /products/:ref/remove
  */
-const removeStock = async (req, res) => {
+const removeStock = async (
+  req,
+  res
+) => {
   try {
-    const { quantity } = req.body;
+    const { quantity } =
+      req.body;
 
     if (
-      !Number.isInteger(quantity) ||
+      !Number.isInteger(
+        quantity
+      ) ||
       quantity <= 0
     ) {
       return res.status(400).json({
@@ -965,49 +1194,67 @@ const removeStock = async (req, res) => {
       });
     }
 
-    const product = await Product.findOne({
-      ref: req.params.ref,
-    });
+    const product =
+      await Product.findOne({
+        ref: req.params.ref,
+      });
 
     if (!product) {
       return res.status(404).json({
-        message: "Produit introuvable",
+        message:
+          "Produit introuvable",
       });
     }
 
-    const oldQuantity = product.quantity;
+    const oldQuantity =
+      product.quantity;
 
-    if (quantity > oldQuantity) {
+    if (
+      quantity >
+      oldQuantity
+    ) {
       return res.status(400).json({
-        message: "Stock insuffisant",
-        stockDisponible: oldQuantity,
+        message:
+          "Stock insuffisant",
+
+        stockDisponible:
+          oldQuantity,
       });
     }
 
-    product.quantity -= quantity;
+    product.quantity -=
+      quantity;
 
     await product.save();
 
-    /*
-     * Ticket historique du mouvement.
-     */
-    const ticket = await Ticket.create({
-      type: "STOCK_REMOVE",
+    const ticket =
+      await Ticket.create({
+        type: "STOCK_REMOVE",
 
-      productRef: product.ref,
+        productRef:
+          product.ref,
 
-      productName: product.name,
+        productName:
+          product.name,
 
-      site: product.location,
+        site:
+          product.location,
 
-      quantity,
+        quantity,
 
-      oldStock: oldQuantity,
+        oldStock:
+          oldQuantity,
 
-      newStock: product.quantity,
+        newStock:
+          product.quantity,
 
-      action: "Retrait de stock",
-    });
+        from: "STOCK",
+
+        to: "STOCK",
+
+        action:
+          "Retrait de stock",
+      });
 
     res.json({
       message:
@@ -1015,11 +1262,13 @@ const removeStock = async (req, res) => {
 
       ref: product.ref,
 
-      removedQuantity: quantity,
+      removedQuantity:
+        quantity,
 
       oldQuantity,
 
-      newQuantity: product.quantity,
+      newQuantity:
+        product.quantity,
 
       product,
 
@@ -1036,133 +1285,235 @@ const removeStock = async (req, res) => {
 };
 
 /* =========================================================
-   TRANSIT
+   STOCK -> INTERVENTION
 ========================================================= */
 
 /**
  * POST /products/:ref/send
+ *
+ * Body :
+ *
+ * {
+ *   "quantity": 2,
+ *   "interventionRef": "INT-2026-001"
+ * }
  */
-const sendToSite = async (req, res) => {
+const sendToSite = async (
+  req,
+  res
+) => {
   try {
-    const { quantity, interventionRef } = req.body;
+    const {
+      quantity,
+      interventionRef,
+    } = req.body;
 
-    // Vérification quantité
-    if (!Number.isInteger(quantity) || quantity <= 0) {
+    /* =========================
+       VALIDATION
+    ========================= */
+
+    if (
+      !Number.isInteger(
+        quantity
+      ) ||
+      quantity <= 0
+    ) {
       return res.status(400).json({
-        message: "La quantité doit être un entier supérieur à 0",
+        message:
+          "La quantité doit être un entier supérieur à 0",
       });
     }
 
-    // Vérification intervention
     if (!interventionRef) {
       return res.status(400).json({
-        message: "La référence de l'intervention est obligatoire",
+        message:
+          "La référence de l'intervention est obligatoire",
       });
     }
 
-    const intervention = await Intervention.findOne({
-      ref: interventionRef.trim(),
-    });
+    /* =========================
+       INTERVENTION
+    ========================= */
+
+    const intervention =
+      await Intervention.findOne({
+        ref:
+          interventionRef.trim(),
+      });
 
     if (!intervention) {
       return res.status(404).json({
-        message: "Intervention introuvable",
+        message:
+          "Intervention introuvable",
       });
     }
 
-    // Intervention obligatoirement ouverte
-    if (intervention.status !== "open") {
+    if (
+      intervention.status !==
+      "open"
+    ) {
       return res.status(400).json({
-        message: "Impossible d'envoyer du matériel vers une intervention clôturée",
+        message:
+          "Impossible d'envoyer du matériel vers une intervention clôturée",
       });
     }
 
-    const product = await Product.findOne({
-      ref: req.params.ref,
-    });
+    /* =========================
+       PRODUIT
+    ========================= */
+
+    const product =
+      await Product.findOne({
+        ref: req.params.ref,
+      });
 
     if (!product) {
       return res.status(404).json({
-        message: "Produit introuvable",
-        productRef: req.params.ref,
+        message:
+          "Produit introuvable",
+        productRef:
+          req.params.ref,
       });
     }
 
-    // Stock disponible avant modification
-    const oldStock = product.quantity;
+    /* =========================
+       STOCK ENTREPÔT
+    ========================= */
 
-    // Vérification du stock
-    if (quantity > oldStock) {
+    const oldStock =
+      product.quantity;
+
+    if (
+      quantity >
+      oldStock
+    ) {
       return res.status(400).json({
-        message: "Stock insuffisant",
-        stockDisponible: oldStock,
-        quantityDemandee: quantity,
+        message:
+          "Stock insuffisant",
+
+        stockDisponible:
+          oldStock,
+
+        quantityDemandee:
+          quantity,
       });
     }
 
-    const site = intervention.site;
+    const newStock =
+      oldStock - quantity;
 
-    // Génération référence transit
-    const transitRef = generateTransitRef();
+    product.quantity =
+      newStock;
 
-    // Nouveau stock central
-    const newStock = oldStock - quantity;
+    /* =========================
+       STOCK INTERVENTION
+    ========================= */
 
-    // Retrait du stock central
-    product.quantity = newStock;
+    let interventionTransit =
+      product.enTransit.find(
+        (item) =>
+          item.interventionRef ===
+          intervention.ref
+      );
 
-    // Ajout du matériel sur le site
-    product.enTransit.push({
-      ref: transitRef,
-      quantity,
-      site,
-    });
+    const oldTransitQuantity =
+      interventionTransit
+        ? interventionTransit.quantity
+        : 0;
+
+    if (interventionTransit) {
+      interventionTransit.quantity +=
+        quantity;
+    } else {
+      product.enTransit.push({
+        interventionRef:
+          intervention.ref,
+
+        quantity,
+      });
+
+      interventionTransit =
+        product.enTransit[
+          product.enTransit.length - 1
+        ];
+    }
+
+    const newTransitQuantity =
+      oldTransitQuantity +
+      quantity;
 
     await product.save();
 
-    // Création du ticket
-   const ticket = await Ticket.create({
-  type: "TRANSIT_SEND",
+    /* =========================
+       TICKET
+    ========================= */
 
-  productRef: product.ref,
-  productName: product.name,
+    const ticket =
+      await Ticket.create({
+        type: "TRANSIT_SEND",
 
-  from: "STOCK",
-  to: intervention.ref,
+        productRef:
+          product.ref,
 
-  quantity,
-  transitRef,
-  site,
+        productName:
+          product.name,
 
-  oldStock,
-  newStock,
+        from: "STOCK",
 
-  oldTransitQuantity: null,
-  newTransitQuantity: quantity,
+        to:
+          intervention.ref,
 
-  action: `Envoi du produit vers l'intervention ${intervention.ref}`,
-});
+        quantity,
+
+        site:
+          intervention.site,
+
+        oldStock,
+
+        newStock,
+
+        oldTransitQuantity,
+
+        newTransitQuantity,
+
+        action:
+          `Envoi du produit vers l'intervention ${intervention.ref}`,
+      });
 
     res.json({
-      message: "Produit envoyé vers l'intervention avec succès",
+      message:
+        "Produit envoyé vers l'intervention avec succès",
 
       intervention: {
-        ref: intervention.ref,
-        name: intervention.name,
-        site: intervention.site,
+        ref:
+          intervention.ref,
+
+        name:
+          intervention.name,
+
+        site:
+          intervention.site,
       },
 
       product: {
-        ref: product.ref,
-        name: product.name,
+        ref:
+          product.ref,
+
+        name:
+          product.name,
+
         oldStock,
-        quantity: product.quantity,
+
+        quantity:
+          product.quantity,
       },
 
-      transit: {
-        ref: transitRef,
-        quantity,
-        site,
+      interventionStock: {
+        oldQuantity:
+          oldTransitQuantity,
+
+        newQuantity:
+          newTransitQuantity,
       },
 
       ticket,
@@ -1174,24 +1525,42 @@ const sendToSite = async (req, res) => {
     );
 
     res.status(500).json({
-      message: "Erreur lors de l'envoi du produit vers l'intervention",
+      message:
+        "Erreur lors de l'envoi du produit vers l'intervention",
     });
   }
 };
+
+/* =========================================================
+   INTERVENTION -> STOCK
+========================================================= */
+
 /**
- * POST /products/:ref/transit/:transitRef/return
+ * POST /products/:ref/transit/:interventionRef/return
+ *
+ * Body :
+ *
+ * {
+ *   "quantity": 2
+ * }
  */
-const returnTransit = async (req, res) => {
+const returnTransit = async (
+  req,
+  res
+) => {
   try {
     const {
       ref,
-      transitRef,
+      interventionRef,
     } = req.params;
 
-    const { quantity } = req.body;
+    const { quantity } =
+      req.body;
 
     if (
-      !Number.isInteger(quantity) ||
+      !Number.isInteger(
+        quantity
+      ) ||
       quantity <= 0
     ) {
       return res.status(400).json({
@@ -1200,87 +1569,136 @@ const returnTransit = async (req, res) => {
       });
     }
 
-    const product = await Product.findOne({
-      ref,
-    });
+    /* =========================
+       PRODUIT
+    ========================= */
+
+    const product =
+      await Product.findOne({
+        ref,
+      });
 
     if (!product) {
       return res.status(404).json({
-        message: "Produit introuvable",
+        message:
+          "Produit introuvable",
       });
     }
 
-    const transitIndex =
-      product.enTransit.findIndex(
-        (transit) =>
-          transit.ref === transitRef
-      );
+    /* =========================
+       INTERVENTION
+    ========================= */
 
-    if (transitIndex === -1) {
+    const intervention =
+      await Intervention.findOne({
+        ref:
+          interventionRef,
+      });
+
+    if (!intervention) {
       return res.status(404).json({
-        message: "Transit introuvable",
-        transitRef,
+        message:
+          "Intervention introuvable",
       });
     }
+
+    /* =========================
+       STOCK INTERVENTION
+    ========================= */
 
     const transit =
-      product.enTransit[transitIndex];
+      product.enTransit.find(
+        (item) =>
+          item.interventionRef ===
+          intervention.ref
+      );
 
-    if (quantity > transit.quantity) {
+    if (!transit) {
+      return res.status(404).json({
+        message:
+          "Ce produit n'est pas présent sur cette intervention",
+      });
+    }
+
+    const oldTransitQuantity =
+      transit.quantity;
+
+    if (
+      quantity >
+      oldTransitQuantity
+    ) {
       return res.status(400).json({
         message:
-          "La quantité retournée dépasse la quantité en transit",
+          "La quantité retournée dépasse la quantité présente sur l'intervention",
 
-        quantityEnTransit:
-          transit.quantity,
+        quantitySurIntervention:
+          oldTransitQuantity,
 
         quantityDemandee:
           quantity,
       });
     }
 
+    /* =========================
+       STOCK ENTREPÔT
+    ========================= */
+
     const oldStock =
       product.quantity;
 
-    const oldTransitQuantity =
+    product.quantity +=
+      quantity;
+
+    transit.quantity -=
+      quantity;
+
+    const newTransitQuantity =
       transit.quantity;
-
-    product.quantity += quantity;
-
-    if (
-      quantity === transit.quantity
-    ) {
-      product.enTransit.splice(
-        transitIndex,
-        1
-      );
-    } else {
-      transit.quantity -= quantity;
-    }
 
     const newStock =
       product.quantity;
 
-    const newTransitQuantity =
-      quantity === oldTransitQuantity
-        ? 0
-        : transit.quantity;
+    /* =========================
+       SUPPRESSION SI 0
+    ========================= */
+
+    if (
+      transit.quantity <= 0
+    ) {
+      product.enTransit =
+        product.enTransit.filter(
+          (item) =>
+            item.interventionRef !==
+            intervention.ref
+        );
+    }
 
     await product.save();
 
+    /* =========================
+       TICKET
+    ========================= */
+
     const ticket =
       await Ticket.create({
-        type: "TRANSIT_RETURN",
+        type:
+          "TRANSIT_RETURN",
 
-        productRef: product.ref,
+        productRef:
+          product.ref,
 
-        productName: product.name,
+        productName:
+          product.name,
 
-        transitRef: transit.ref,
+        from:
+          intervention.ref,
 
-        site: transit.site,
+        to: "STOCK",
 
         quantity,
+
+        site:
+          intervention.site,
 
         oldStock,
 
@@ -1291,155 +1709,207 @@ const returnTransit = async (req, res) => {
         newTransitQuantity,
 
         action:
-          quantity === oldTransitQuantity
-            ? "Retour complet du transit vers l'entrepôt"
-            : "Retour partiel du transit vers l'entrepôt",
+          `Retour du produit depuis l'intervention ${intervention.ref} vers le stock`,
       });
 
     res.json({
       message:
-        quantity === oldTransitQuantity
-          ? "Transit retourné entièrement en stock"
-          : "Une partie du transit a été retournée en stock",
+        "Produit retourné au stock avec succès",
 
-      product,
+      intervention: {
+        ref:
+          intervention.ref,
 
-      transitRef,
+        site:
+          intervention.site,
+      },
 
-      site: transit.site,
+      product: {
+        ref:
+          product.ref,
 
-      returnedQuantity: quantity,
+        name:
+          product.name,
 
-      oldStock,
+        oldStock,
 
-      newStock,
+        newStock,
+      },
 
-      oldTransitQuantity,
+      interventionStock: {
+        oldQuantity:
+          oldTransitQuantity,
 
-      newTransitQuantity,
+        newQuantity:
+          newTransitQuantity,
+      },
 
       ticket,
     });
   } catch (error) {
     console.error(
-      "Erreur retour transit :",
+      "Erreur retour matériel :",
       error
     );
 
     res.status(500).json({
       message:
-        "Erreur lors du retour du transit en stock",
+        "Erreur lors du retour du matériel",
     });
   }
 };
 
+/* =========================================================
+   SUPPRESSION / ANNULATION D'UNE QUANTITÉ D'INTERVENTION
+========================================================= */
+
 /**
- * DELETE /products/:ref/transit/:transitRef
+ * DELETE /products/:ref/transit/:interventionRef
+ *
+ * Remet tout le matériel de cette intervention
+ * dans le stock central.
  */
-const deleteTransit = async (req, res) => {
+const deleteTransit = async (
+  req,
+  res
+) => {
   try {
     const {
       ref,
-      transitRef,
+      interventionRef,
     } = req.params;
 
-    const product = await Product.findOne({
-      ref,
-    });
+    const product =
+      await Product.findOne({
+        ref,
+      });
 
     if (!product) {
       return res.status(404).json({
-        message: "Produit introuvable",
+        message:
+          "Produit introuvable",
       });
     }
 
-    const transitIndex =
-      product.enTransit.findIndex(
-        (transit) =>
-          transit.ref === transitRef
-      );
+    const intervention =
+      await Intervention.findOne({
+        ref:
+          interventionRef,
+      });
 
-    if (transitIndex === -1) {
+    if (!intervention) {
       return res.status(404).json({
-        message: "Transit introuvable",
-        transitRef,
+        message:
+          "Intervention introuvable",
       });
     }
 
     const transit =
-      product.enTransit[transitIndex];
+      product.enTransit.find(
+        (item) =>
+          item.interventionRef ===
+          intervention.ref
+      );
 
-    const oldQuantity =
+    if (!transit) {
+      return res.status(404).json({
+        message:
+          "Ce produit n'est pas présent sur cette intervention",
+      });
+    }
+
+    const returnedQuantity =
+      transit.quantity;
+
+    const oldStock =
       product.quantity;
 
     product.quantity +=
-      transit.quantity;
+      returnedQuantity;
 
-    product.enTransit.splice(
-      transitIndex,
-      1
-    );
+    product.enTransit =
+      product.enTransit.filter(
+        (item) =>
+          item.interventionRef !==
+          intervention.ref
+      );
 
     await product.save();
 
     const ticket =
       await Ticket.create({
-        type: "TRANSIT_RETURN",
+        type:
+          "TRANSIT_RETURN",
 
-        productRef: product.ref,
+        productRef:
+          product.ref,
 
-        productName: product.name,
+        productName:
+          product.name,
 
-        transitRef: transit.ref,
+        from:
+          intervention.ref,
 
-        site: transit.site,
+        to: "STOCK",
 
-        quantity: transit.quantity,
+        quantity:
+          returnedQuantity,
 
-        oldStock: oldQuantity,
+        site:
+          intervention.site,
 
-        newStock: product.quantity,
+        oldStock,
+
+        newStock:
+          product.quantity,
 
         oldTransitQuantity:
-          transit.quantity,
+          returnedQuantity,
 
         newTransitQuantity: 0,
 
         action:
-          "Suppression du transit et retour en stock",
+          `Retour complet du matériel de l'intervention ${intervention.ref} vers le stock`,
       });
 
     res.json({
       message:
-        `Transit ${transitRef} supprimé. ${transit.quantity} objets ont été remis en stock.`,
+        "Matériel retourné au stock avec succès",
 
-      ref: product.ref,
+      intervention: {
+        ref:
+          intervention.ref,
 
-      transitRef: transit.ref,
+        site:
+          intervention.site,
+      },
 
-      site: transit.site,
+      product: {
+        ref:
+          product.ref,
 
-      returnedQuantity:
-        transit.quantity,
+        name:
+          product.name,
 
-      oldQuantity,
+        returnedQuantity,
 
-      newQuantity:
-        product.quantity,
+        oldStock,
 
-      remainingTransits:
-        product.enTransit,
-
-      product,
+        newStock:
+          product.quantity,
+      },
 
       ticket,
     });
   } catch (error) {
-    console.error(error);
+    console.error(
+      "Erreur suppression matériel intervention :",
+      error
+    );
 
     res.status(500).json({
       message:
-        "Erreur lors de la suppression du transit",
+        "Erreur lors du retour du matériel au stock",
     });
   }
 };
@@ -1450,13 +1920,16 @@ const deleteTransit = async (req, res) => {
 
 /**
  * GET /tickets
- *
- * Tous les tickets.
  */
-const getTickets = async (req, res) => {
+const getTickets = async (
+  req,
+  res
+) => {
   try {
-    const tickets = await Ticket.find()
-      .sort({ createdAt: -1 });
+    const tickets =
+      await Ticket.find().sort({
+        createdAt: -1,
+      });
 
     res.json(tickets);
   } catch (error) {
@@ -1474,17 +1947,21 @@ const getTickets = async (req, res) => {
 
 /**
  * GET /tickets/:id
- *
- * Ticket unique.
  */
-const getTicket = async (req, res) => {
+const getTicket = async (
+  req,
+  res
+) => {
   try {
     const ticket =
-      await Ticket.findById(req.params.id);
+      await Ticket.findById(
+        req.params.id
+      );
 
     if (!ticket) {
       return res.status(404).json({
-        message: "Ticket introuvable",
+        message:
+          "Ticket introuvable",
       });
     }
 
@@ -1501,91 +1978,97 @@ const getTicket = async (req, res) => {
     });
   }
 };
-const getinterventionsProducts = async (req, res) => {
-  try {
-    const interventionRef = req.params.ref;
 
-    // =========================
-    // INTERVENTION
-    // =========================
+/* =========================================================
+   PRODUIT SUR UNE INTERVENTION
+========================================================= */
 
-    const intervention = await Intervention.findOne({
-      ref: interventionRef,
-    });
+/**
+ * GET /products/:productRef/intervention/:interventionRef
+ *
+ * Récupère la quantité d'un produit
+ * présente sur une intervention.
+ */
+const getProductOnIntervention =
+  async (req, res) => {
+    try {
+      const {
+        productRef,
+        interventionRef,
+      } = req.params;
 
-    if (!intervention) {
-      return res.status(404).json({
-        message: "Intervention introuvable",
-      });
-    }
+      const intervention =
+        await Intervention.findOne({
+          ref:
+            interventionRef,
+        });
 
-    const site = intervention.site;
+      if (!intervention) {
+        return res.status(404).json({
+          message:
+            "Intervention introuvable",
+        });
+      }
 
-    // =========================
-    // PRODUITS
-    // =========================
+      const product =
+        await Product.findOne({
+          ref: productRef,
+        });
 
-    const products = await Product.find({
-      "enTransit.site": site,
-    });
+      if (!product) {
+        return res.status(404).json({
+          message:
+            "Produit introuvable",
+        });
+      }
 
-    // =========================
-    // MATÉRIEL DU SITE
-    // =========================
+      const transit =
+        product.enTransit.find(
+          (item) =>
+            item.interventionRef ===
+            intervention.ref
+        );
 
-    const siteProducts = products
-      .map((product) => {
-        const siteTransits =
-          product.enTransit.filter(
-            (transit) =>
-              transit.site === site
-          );
+      const quantity =
+        transit
+          ? transit.quantity
+          : 0;
 
-        const quantity =
-          siteTransits.reduce(
-            (total, transit) =>
-              total + transit.quantity,
-            0
-          );
+      res.json({
+        intervention: {
+          ref:
+            intervention.ref,
 
-        return {
-          ref: product.ref,
-          name: product.name,
+          name:
+            intervention.name,
+
+          site:
+            intervention.site,
+        },
+
+        product: {
+          ref:
+            product.ref,
+
+          name:
+            product.name,
+
           quantity,
-          site,
-        };
-      })
-      .filter(
-        (product) =>
-          product.quantity > 0
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Erreur récupération produit intervention :",
+        error
       );
 
-    // =========================
-    // RÉPONSE
-    // =========================
+      res.status(500).json({
+        message:
+          "Erreur lors de la récupération du produit sur l'intervention",
+      });
+    }
+  };
 
-    res.json({
-      intervention: {
-        ref: intervention.ref,
-        name: intervention.name,
-        client: intervention.client,
-        site: intervention.site,
-      },
-
-      products: siteProducts,
-    });
-  } catch (error) {
-    console.error(
-      "Erreur récupération matériel du site :",
-      error
-    );
-
-    res.status(500).json({
-      message:
-        "Erreur lors de la récupération du matériel du site",
-    });
-  }
-};
 /* =========================================================
    EXPORT
 ========================================================= */
@@ -1598,8 +2081,13 @@ module.exports = {
   updateIntervention,
   closeIntervention,
   deleteIntervention,
+
+  /* Matériel intervention */
   getInterventionProducts,
+  getInterventionProduct,
   getInterventionTickets,
+
+  /* Transfert */
   transferProduct,
 
   /* Products */
@@ -1607,13 +2095,20 @@ module.exports = {
   getProduct,
   createProduct,
   updateProduct,
+
+  /* Stock */
   addStock,
   removeStock,
-  getinterventionsProducts,
-  /* Transit */
+
+  /* Stock -> intervention */
   sendToSite,
+
+  /* Intervention -> stock */
   returnTransit,
   deleteTransit,
+
+  /* Produit sur intervention */
+  getProductOnIntervention,
 
   /* Tickets */
   getTickets,
