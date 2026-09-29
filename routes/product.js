@@ -1,60 +1,41 @@
-const mongoose = require("mongoose");
+const express = require("express");
 
-const transitSchema = new mongoose.Schema(
-  {
-    interventionRef: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+const {
+  getProducts,
+  getProduct,
+  createProduct,
+  updateProduct,
+  addStock,
+  removeStock,
+  sendToSite,
+  returnTransit,
+  deleteTransit,
+  getProductOnIntervention,
+} = require("../controllers/product");
 
-    quantity: {
-      type: Number,
-      required: true,
-      min: 0,
-      default: 0,
-    },
-  },
-  { _id: false }
+const router = express.Router();
+
+router.get("/", getProducts);
+router.post("/", createProduct);
+
+router.get("/:ref/intervention/:interventionRef", getProductOnIntervention);
+
+router.post("/:ref/add", addStock);
+router.post("/:ref/remove", removeStock);
+
+router.post("/:ref/send", sendToSite);
+
+router.post(
+  "/:ref/transit/:interventionRef/return",
+  returnTransit
 );
 
-const productSchema = new mongoose.Schema(
-  {
-    ref: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-    },
-
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    quantity: {
-      type: Number,
-      required: true,
-      min: 0,
-      default: 0,
-    },
-
-    location: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    enTransit: {
-      type: [transitSchema],
-      default: [],
-    },
-  },
-  {
-    timestamps: true,
-  }
+router.delete(
+  "/:ref/transit/:interventionRef",
+  deleteTransit
 );
 
-module.exports =
-  mongoose.model("Product", productSchema);
+router.get("/:ref", getProduct);
+router.put("/:ref", updateProduct);
+
+module.exports = router;
