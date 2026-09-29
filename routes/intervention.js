@@ -7,6 +7,7 @@ const {
   updateIntervention,
   closeIntervention,
   getInterventionTickets,
+  transferProduct,
 } = require("../controllers/product");
 
 const router = express.Router();
@@ -36,19 +37,20 @@ router.post("/create", createIntervention);
 router.put("/:ref", updateIntervention);
 
 /*
- * POST /interventions/:ref/close
+ * PATCH /interventions/:ref/close
  * Clôture une intervention
  */
 router.patch("/:ref/close", closeIntervention);
 
 /*
+ * POST /interventions/:ref/transfer
+ * Transfère du matériel vers une autre intervention
+ */
+router.post("/:ref/transfer", transferProduct);
+
+/*
  * GET /interventions/:ref/tickets
  * Récupère tous les tickets liés à cette intervention
- *
- * Un ticket est lié si :
- * ticket.from === intervention.ref
- * OU
- * ticket.to === intervention.ref
  */
 router.get("/:ref/tickets", getInterventionTickets);
 
