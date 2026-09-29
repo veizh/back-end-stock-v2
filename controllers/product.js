@@ -1127,25 +1127,17 @@ const sendToSite = async (req, res) => {
 
     // Création du ticket
     const ticket = await Ticket.create({
-      type: "TRANSIT_SEND",
-
-      productRef: product.ref,
-
-      productName: product.name,
-
-      transitRef,
-
-      site,
-
-      quantity,
-
-      oldStock: oldQuantity,
-
-      newStock: newQuantity,
-
-      action:
-        `Envoi du produit vers l'intervention ${intervention.ref}`,
-    });
+  type: "TRANSIT_SEND",
+  productRef: product.ref,
+  productName: product.name,
+  transitRef,
+  interventionRef: intervention.ref,
+  site,
+  quantity,
+  oldStock,
+  newStock,
+  action: `Envoi du produit vers l'intervention ${intervention.ref}`,
+});
 
     res.json({
       message:
