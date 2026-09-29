@@ -7,7 +7,7 @@ const {
   updateIntervention,
   closeIntervention,
   getInterventionTickets,
-  transferProduct,
+  transferProduct,getinterventionsProducts,
 } = require("../controllers/product");
 
 const router = express.Router();
@@ -41,7 +41,7 @@ router.put("/:ref", updateIntervention);
  * Clôture une intervention
  */
 router.patch("/:ref/close", closeIntervention);
-router.get("/:ref/products",getSiteProducts);
+router.get("/:ref/products",getinterventionsProducts);
 /*
  * POST /interventions/:ref/transfer
  * Transfère du matériel vers une autre intervention
