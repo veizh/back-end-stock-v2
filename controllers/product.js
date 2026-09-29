@@ -1513,7 +1513,91 @@ const getTicket = async (req, res) => {
     });
   }
 };
+const getinterventionsProducts = async (req, res) => {
+  try {
+    const interventionRef = req.params.ref;
 
+    // =========================
+    // INTERVENTION
+    // =========================
+
+    const intervention = await Intervention.findOne({
+      ref: interventionRef,
+    });
+
+    if (!intervention) {
+      return res.status(404).json({
+        message: "Intervention introuvable",
+      });
+    }
+
+    const site = intervention.site;
+
+    // =========================
+    // PRODUITS
+    // =========================
+
+    const products = await Product.find({
+      "enTransit.site": site,
+    });
+
+    // =========================
+    // MATÉRIEL DU SITE
+    // =========================
+
+    const siteProducts = products
+      .map((product) => {
+        const siteTransits =
+          product.enTransit.filter(
+            (transit) =>
+              transit.site === site
+          );
+
+        const quantity =
+          siteTransits.reduce(
+            (total, transit) =>
+              total + transit.quantity,
+            0
+          );
+
+        return {
+          ref: product.ref,
+          name: product.name,
+          quantity,
+          site,
+        };
+      })
+      .filter(
+        (product) =>
+          product.quantity > 0
+      );
+
+    // =========================
+    // RÉPONSE
+    // =========================
+
+    res.json({
+      intervention: {
+        ref: intervention.ref,
+        name: intervention.name,
+        client: intervention.client,
+        site: intervention.site,
+      },
+
+      products: siteProducts,
+    });
+  } catch (error) {
+    console.error(
+      "Erreur récupération matériel du site :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la récupération du matériel du site",
+    });
+  }
+};
 /* =========================================================
    EXPORT
 ========================================================= */
@@ -1537,7 +1621,7 @@ module.exports = {
   updateProduct,
   addStock,
   removeStock,
-
+  getinterventionsProducts,
   /* Transit */
   sendToSite,
   returnTransit,

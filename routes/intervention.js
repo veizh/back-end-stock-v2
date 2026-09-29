@@ -41,7 +41,7 @@ router.put("/:ref", updateIntervention);
  * Clôture une intervention
  */
 router.patch("/:ref/close", closeIntervention);
-
+router.get("/:ref/products",getSiteProducts);
 /*
  * POST /interventions/:ref/transfer
  * Transfère du matériel vers une autre intervention
