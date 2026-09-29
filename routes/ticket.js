@@ -4,7 +4,7 @@ const {
   getTickets,
   getTicket,
   createTicket,
-} = require("../controllers/ticket");
+} = require("../controllers/product");
 
 const router = express.Router();
 

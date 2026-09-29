@@ -7,7 +7,7 @@ const {
   updateIntervention,
   closeIntervention,
   getInterventionTickets,
-} = require("../controllers/intervention");
+} = require("../controllers/product");
 
 const router = express.Router();
 
