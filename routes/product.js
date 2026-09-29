@@ -13,14 +13,26 @@ const {
 } = require("../controllers/product");
 
 const router = express.Router();
-router.put("/:ref", updateProduct);
+
 router.get("/", getProducts);
+
 router.get("/:ref", getProduct);
-router.post("/:ref/send", sendToSite);
+
 router.post("/create", createProduct);
-router.delete("/:ref/transit/:transitRef", deleteTransit);
+
+router.put("/:ref", updateProduct);
+
 router.post("/:ref/add", addStock);
+
 router.post("/:ref/remove", removeStock);
-router.post("/:ref/transit/:transitRef/return", returnTransit);
+
+router.post("/:ref/send", sendToSite);
+
+router.delete("/:ref/transit/:transitRef", deleteTransit);
+
+router.post(
+  "/:ref/transit/:transitRef/return",
+  returnTransit
+);
 
 module.exports = router;

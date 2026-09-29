@@ -11,42 +11,78 @@ const ticketSchema = new mongoose.Schema(
         "STOCK_ADD",
         "STOCK_REMOVE",
         "PRODUCT_UPDATE",
+        "SITE_TRANSFER",
       ],
     },
 
     productRef: {
       type: String,
       required: true,
+      trim: true,
     },
 
     productName: {
       type: String,
       required: true,
+      trim: true,
     },
 
+    /*
+     * TRANSFERT ENTRE INTERVENTIONS
+     *
+     * from = intervention qui envoie
+     * to   = intervention qui reçoit
+     *
+     * Exemple :
+     *
+     * from: "INT-2026-004"
+     * to:   "INT-2026-002"
+     */
+    from: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    to: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    /*
+     * Quantité transférée / ajoutée / retirée
+     */
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+
+    /*
+     * Informations liées aux anciens mouvements
+     * de stock / transit.
+     */
     transitRef: {
       type: String,
       default: null,
+      trim: true,
     },
 
     site: {
       type: String,
       default: null,
-    },
-
-    quantity: {
-      type: Number,
-      required: true,
+      trim: true,
     },
 
     oldStock: {
       type: Number,
-      required: true,
+      default: null,
     },
 
     newStock: {
       type: Number,
-      required: true,
+      default: null,
     },
 
     oldTransitQuantity: {
@@ -62,6 +98,7 @@ const ticketSchema = new mongoose.Schema(
     action: {
       type: String,
       required: true,
+      trim: true,
     },
   },
   {

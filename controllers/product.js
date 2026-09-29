@@ -1,334 +1,764 @@
 const Product = require("../models/product");
 const Ticket = require("../models/ticket");
+const Intervention = require("../models/intervention");
+
+/* =========================================================
+   HELPERS
+========================================================= */
 
 const generateTransitRef = () => {
   return `TR-${Date.now().toString(36).toUpperCase()}`;
 };
 
-const deleteTransit = async (req, res) => {
+/* =========================================================
+   INTERVENTIONS
+========================================================= */
+
+/**
+ * GET /interventions
+ *
+ * Récupère toutes les interventions.
+ */
+const getInterventions = async (req, res) => {
   try {
-    const { ref, transitRef } = req.params;
+    const interventions = await Intervention.find()
+      .sort({ createdAt: -1 });
 
-    // Recherche du produit
-    const product = await Product.findOne({ ref });
-
-    if (!product) {
-      return res.status(404).json({
-        message: "Produit introuvable",
-      });
-    }
-
-    // Recherche du transit
-    const transitIndex = product.enTransit.findIndex(
-      (transit) => transit.ref === transitRef
+    res.json(interventions);
+  } catch (error) {
+    console.error(
+      "Erreur récupération interventions :",
+      error
     );
 
-    if (transitIndex === -1) {
-      return res.status(404).json({
-        message: "Transit introuvable",
-        transitRef,
-      });
-    }
-
-    // Récupération du transit
-    const transit = product.enTransit[transitIndex];
-
-    const oldQuantity = product.quantity;
-
-    // La quantité du transit retourne dans le stock
-    product.quantity += transit.quantity;
-
-    // Suppression du transit
-    product.enTransit.splice(transitIndex, 1);
-
-    // Sauvegarde
-    await product.save();
-
-    res.json({
-      message: `Transit ${transitRef} supprimé. ${transit.quantity} objets ont été remis en stock.`,
-
-      ref: product.ref,
-
-      transitRef: transit.ref,
-
-      site: transit.site,
-
-      returnedQuantity: transit.quantity,
-
-      oldQuantity,
-
-      newQuantity: product.quantity,
-
-      remainingTransits: product.enTransit,
-
-      product,
-    });
-  } catch (error) {
-    console.error(error);
-
     res.status(500).json({
-      message: "Erreur lors de la suppression du transit",
+      message: "Erreur lors de la récupération des interventions",
     });
   }
 };
 
-const sendToSite = async (req, res) => {
+/**
+ * GET /interventions/:ref
+ *
+ * Récupère une intervention par sa ref.
+ */
+const getIntervention = async (req, res) => {
   try {
-    const { quantity, site } = req.body;
-
-    // Vérification de la quantité
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      return res.status(400).json({
-        message: "La quantité doit être un entier supérieur à 0",
-      });
-    }
-
-    // Vérification du site
-    if (!site || typeof site !== "string" || site.trim() === "") {
-      return res.status(400).json({
-        message: "Le site de destination est obligatoire",
-      });
-    }
-
-    // Recherche du produit
-    const product = await Product.findOne({
+    const intervention = await Intervention.findOne({
       ref: req.params.ref,
     });
 
-    if (!product) {
+    if (!intervention) {
       return res.status(404).json({
-        message: "Produit introuvable",
+        message: "Intervention introuvable",
       });
     }
 
-    // Vérification du stock disponible
-    if (quantity > product.quantity) {
-      return res.status(400).json({
-        message: "Stock insuffisant",
-        stockDisponible: product.quantity,
-      });
-    }
-
-    // Anciennes valeurs pour la réponse
-    const oldQuantity = product.quantity;
-    const oldEnTransit = [...product.enTransit];
-
-    // Génération d'une référence unique pour l'envoi
-    const transitRef = `TR-${Date.now().toString(36).toUpperCase()}`;
-
-    // Nouveau stock après envoi
-    const newQuantity = oldQuantity - quantity;
-
-    // Retrait du stock
-    product.quantity = newQuantity;
-
-    // Ajout de l'envoi dans les produits en transit
-    product.enTransit.push({
-      ref: transitRef,
-      quantity,
-      site: site.trim(),
-    });
-
-    // Sauvegarde
-    await product.save();
-
-    // Réponse
-    res.json({
-      message: `Envoi effectué vers ${site.trim()}. Il reste ${newQuantity} objets en stock.`,
-
-      ref: product.ref,
-
-      transitRef,
-
-      sentQuantity: quantity,
-
-      destination: site.trim(),
-
-      oldQuantity,
-
-      newQuantity,
-
-      oldEnTransit,
-
-      newEnTransit: product.enTransit,
-
-      product,
-    });
+    res.json(intervention);
   } catch (error) {
-    console.error(error);
+    console.error(
+      "Erreur récupération intervention :",
+      error
+    );
 
     res.status(500).json({
-      message: "Erreur lors de l'envoi du produit vers le site",
+      message: "Erreur lors de la récupération de l'intervention",
     });
   }
 };
-const returnTransit = async (req, res) => {
+
+/**
+ * POST /interventions
+ *
+ * Création d'une intervention.
+ */
+const createIntervention = async (req, res) => {
   try {
-    const { ref, transitRef } = req.params;
-    const { quantity } = req.body;
+    const {
+      ref,
+      name,
+      client,
+      site,
+      address,
+      quoteNumber,
+      status,
+    } = req.body;
 
-    // =========================
-    // VALIDATION
-    // =========================
-
-    if (!Number.isInteger(quantity) || quantity <= 0) {
+    if (!ref || !name || !client || !site || !address) {
       return res.status(400).json({
-        message: "La quantité doit être un entier supérieur à 0",
+        message:
+          "ref, name, client, site et address sont obligatoires",
       });
     }
 
-    // =========================
-    // RECHERCHE DU PRODUIT
-    // =========================
+    const existingIntervention =
+      await Intervention.findOne({ ref });
 
-    const product = await Product.findOne({
+    if (existingIntervention) {
+      return res.status(409).json({
+        message: "Cette référence d'intervention existe déjà",
+      });
+    }
+
+    const intervention = await Intervention.create({
       ref,
+      name,
+      client,
+      site,
+      address,
+      quoteNumber: quoteNumber || null,
+      status: status || "open",
     });
 
-    if (!product) {
-      return res.status(404).json({
-        message: "Produit introuvable",
-      });
-    }
-
-    // =========================
-    // RECHERCHE DU TRANSIT
-    // =========================
-
-    const transitIndex = product.enTransit.findIndex(
-      (transit) => transit.ref === transitRef
+    res.status(201).json(intervention);
+  } catch (error) {
+    console.error(
+      "Erreur création intervention :",
+      error
     );
 
-    if (transitIndex === -1) {
-      return res.status(404).json({
-        message: "Transit introuvable",
-        transitRef,
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: "Cette référence d'intervention existe déjà",
       });
     }
 
-    const transit = product.enTransit[transitIndex];
+    res.status(500).json({
+      message: "Erreur lors de la création de l'intervention",
+    });
+  }
+};
 
-    // =========================
-    // VÉRIFICATION QUANTITÉ
-    // =========================
+/**
+ * PUT /interventions/:ref
+ *
+ * Modification d'une intervention.
+ */
+const updateIntervention = async (req, res) => {
+  try {
+    const intervention = await Intervention.findOne({
+      ref: req.params.ref,
+    });
 
-    if (quantity > transit.quantity) {
+    if (!intervention) {
+      return res.status(404).json({
+        message: "Intervention introuvable",
+      });
+    }
+
+    const {
+      ref,
+      name,
+      client,
+      site,
+      address,
+      quoteNumber,
+      status,
+    } = req.body;
+
+    if (ref && ref !== intervention.ref) {
+      const existingIntervention =
+        await Intervention.findOne({ ref });
+
+      if (existingIntervention) {
+        return res.status(409).json({
+          message:
+            "Cette référence d'intervention existe déjà",
+        });
+      }
+
+      intervention.ref = ref;
+    }
+
+    if (name !== undefined) {
+      intervention.name = name;
+    }
+
+    if (client !== undefined) {
+      intervention.client = client;
+    }
+
+    if (site !== undefined) {
+      intervention.site = site;
+    }
+
+    if (address !== undefined) {
+      intervention.address = address;
+    }
+
+    if (quoteNumber !== undefined) {
+      intervention.quoteNumber = quoteNumber;
+    }
+
+    if (status !== undefined) {
+      if (!["open", "closed"].includes(status)) {
+        return res.status(400).json({
+          message:
+            "Le statut doit être 'open' ou 'closed'",
+        });
+      }
+
+      intervention.status = status;
+    }
+
+    await intervention.save();
+
+    res.json({
+      message: "Intervention modifiée avec succès",
+      intervention,
+    });
+  } catch (error) {
+    console.error(
+      "Erreur modification intervention :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la modification de l'intervention",
+    });
+  }
+};
+
+/**
+ * PATCH /interventions/:ref/close
+ *
+ * Clôture une intervention.
+ */
+const closeIntervention = async (req, res) => {
+  try {
+    const intervention = await Intervention.findOne({
+      ref: req.params.ref,
+    });
+
+    if (!intervention) {
+      return res.status(404).json({
+        message: "Intervention introuvable",
+      });
+    }
+
+    if (intervention.status === "closed") {
       return res.status(400).json({
-        message: "La quantité retournée dépasse la quantité en transit",
-        quantityEnTransit: transit.quantity,
+        message: "Cette intervention est déjà clôturée",
+      });
+    }
+
+    intervention.status = "closed";
+
+    await intervention.save();
+
+    res.json({
+      message: "Intervention clôturée avec succès",
+      intervention,
+    });
+  } catch (error) {
+    console.error(
+      "Erreur clôture intervention :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la clôture de l'intervention",
+    });
+  }
+};
+
+/**
+ * DELETE /interventions/:ref
+ *
+ * Suppression d'une intervention.
+ */
+const deleteIntervention = async (req, res) => {
+  try {
+    const intervention = await Intervention.findOneAndDelete({
+      ref: req.params.ref,
+    });
+
+    if (!intervention) {
+      return res.status(404).json({
+        message: "Intervention introuvable",
+      });
+    }
+
+    res.json({
+      message: "Intervention supprimée avec succès",
+      intervention,
+    });
+  } catch (error) {
+    console.error(
+      "Erreur suppression intervention :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la suppression de l'intervention",
+    });
+  }
+};
+
+/* =========================================================
+   MATÉRIEL D'UNE INTERVENTION
+========================================================= */
+
+/**
+ * GET /interventions/:ref/items
+ *
+ * Récupère tout le matériel présent sur le site
+ * de l'intervention.
+ *
+ * On utilise intervention.site pour faire le lien
+ * avec Product.location.
+ */
+const getInterventionProducts = async (req, res) => {
+  try {
+    const intervention = await Intervention.findOne({
+      ref: req.params.ref,
+    });
+
+    if (!intervention) {
+      return res.status(404).json({
+        message: "Intervention introuvable",
+      });
+    }
+
+    const products = await Product.find({
+      location: intervention.site,
+    }).sort({ ref: 1 });
+
+    res.json({
+      intervention: {
+        ref: intervention.ref,
+        site: intervention.site,
+      },
+      products,
+    });
+  } catch (error) {
+    console.error(
+      "Erreur récupération matériel intervention :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la récupération du matériel de l'intervention",
+    });
+  }
+};
+
+/**
+ * GET /interventions/:ref/tickets
+ *
+ * Récupère tous les tickets liés à l'intervention.
+ *
+ * Un ticket est lié si :
+ *
+ * from === intervention.ref
+ *
+ * OU
+ *
+ * to === intervention.ref
+ */
+const getInterventionTickets = async (req, res) => {
+  try {
+    const intervention = await Intervention.findOne({
+      ref: req.params.ref,
+    });
+
+    if (!intervention) {
+      return res.status(404).json({
+        message: "Intervention introuvable",
+      });
+    }
+
+    const tickets = await Ticket.find({
+      $or: [
+        { from: intervention.ref },
+        { to: intervention.ref },
+      ],
+    }).sort({ createdAt: -1 });
+
+    res.json(tickets);
+  } catch (error) {
+    console.error(
+      "Erreur récupération tickets intervention :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la récupération des tickets",
+    });
+  }
+};
+
+/* =========================================================
+   TRANSFERT ENTRE INTERVENTIONS
+========================================================= */
+
+/**
+ * POST /interventions/:ref/transfer
+ *
+ * Body :
+ *
+ * {
+ *   "to": "INT-2026-002",
+ *   "productRef": "P001",
+ *   "quantity": 3
+ * }
+ *
+ * Le produit est recherché avec :
+ *
+ * product.ref = productRef
+ * product.location = site de l'intervention source
+ *
+ * Puis :
+ *
+ * source.quantity -= quantity
+ *
+ * destination.quantity += quantity
+ *
+ * Et création d'un ticket SITE_TRANSFER.
+ */
+const transferProduct = async (req, res) => {
+  try {
+    const fromRef = req.params.ref;
+
+    const {
+      to,
+      productRef,
+      quantity,
+    } = req.body;
+
+    /* =========================
+       VALIDATION
+    ========================= */
+
+    if (!to) {
+      return res.status(400).json({
+        message:
+          "L'intervention de destination est obligatoire",
+      });
+    }
+
+    if (!productRef) {
+      return res.status(400).json({
+        message:
+          "La référence du produit est obligatoire",
+      });
+    }
+
+    if (
+      !Number.isInteger(quantity) ||
+      quantity <= 0
+    ) {
+      return res.status(400).json({
+        message:
+          "La quantité doit être un entier supérieur à 0",
+      });
+    }
+
+    if (fromRef === to) {
+      return res.status(400).json({
+        message:
+          "Une intervention ne peut pas transférer du matériel vers elle-même",
+      });
+    }
+
+    /* =========================
+       INTERVENTION SOURCE
+    ========================= */
+
+    const fromIntervention =
+      await Intervention.findOne({
+        ref: fromRef,
+      });
+
+    if (!fromIntervention) {
+      return res.status(404).json({
+        message:
+          "Intervention source introuvable",
+      });
+    }
+
+    /* =========================
+       INTERVENTION DESTINATION
+    ========================= */
+
+    const toIntervention =
+      await Intervention.findOne({
+        ref: to,
+      });
+
+    if (!toIntervention) {
+      return res.status(404).json({
+        message:
+          "Intervention destination introuvable",
+      });
+    }
+
+    /* =========================
+       VÉRIFICATION STATUT
+    ========================= */
+
+    if (fromIntervention.status === "closed") {
+      return res.status(400).json({
+        message:
+          "Impossible de transférer du matériel depuis une intervention clôturée",
+      });
+    }
+
+    if (toIntervention.status === "closed") {
+      return res.status(400).json({
+        message:
+          "Impossible de transférer du matériel vers une intervention clôturée",
+      });
+    }
+
+    /* =========================
+       PRODUIT SOURCE
+    ========================= */
+
+    const sourceProduct = await Product.findOne({
+      ref: productRef,
+      location: fromIntervention.site,
+    });
+
+    if (!sourceProduct) {
+      return res.status(404).json({
+        message:
+          "Produit introuvable sur le site source",
+        productRef,
+        site: fromIntervention.site,
+      });
+    }
+
+    /* =========================
+       STOCK SOURCE
+    ========================= */
+
+    if (quantity > sourceProduct.quantity) {
+      return res.status(400).json({
+        message: "Stock insuffisant sur le site source",
+        stockDisponible: sourceProduct.quantity,
         quantityDemandee: quantity,
       });
     }
 
-    // =========================
-    // ANCIENNES VALEURS
-    // =========================
+    /* =========================
+       PRODUIT DESTINATION
+    ========================= */
 
-    const oldStock = product.quantity;
-    const oldTransitQuantity = transit.quantity;
+    let destinationProduct =
+      await Product.findOne({
+        ref: productRef,
+        location: toIntervention.site,
+      });
 
-    // =========================
-    // RETOUR EN STOCK
-    // =========================
-
-    product.quantity += quantity;
-
-    // =========================
-    // MODIFICATION DU TRANSIT
-    // =========================
-
-    if (quantity === transit.quantity) {
-      // Retour complet
-      product.enTransit.splice(transitIndex, 1);
-    } else {
-      // Retour partiel
-      transit.quantity -= quantity;
+    /*
+     * Si le produit n'existe pas encore
+     * sur le site destination, on le crée.
+     */
+    if (!destinationProduct) {
+      destinationProduct = await Product.create({
+        ref: sourceProduct.ref,
+        name: sourceProduct.name,
+        quantity: 0,
+        location: toIntervention.site,
+        enTransit: [],
+      });
     }
 
-    const newStock = product.quantity;
+    /* =========================
+       ANCIENNES VALEURS
+    ========================= */
 
-    const newTransitQuantity =
-      quantity === oldTransitQuantity
-        ? 0
-        : transit.quantity;
+    const oldSourceStock =
+      sourceProduct.quantity;
 
-    // =========================
-    // SAUVEGARDE PRODUIT
-    // =========================
+    const oldDestinationStock =
+      destinationProduct.quantity;
 
-    await product.save();
+    /* =========================
+       TRANSFERT
+    ========================= */
 
-    // =========================
-    // CRÉATION DU TICKET
-    // =========================
+    sourceProduct.quantity -= quantity;
+
+    destinationProduct.quantity += quantity;
+
+    /* =========================
+       SAUVEGARDE
+    ========================= */
+
+    await sourceProduct.save();
+    await destinationProduct.save();
+
+    /* =========================
+       TICKET
+    ========================= */
 
     const ticket = await Ticket.create({
-      type: "TRANSIT_RETURN",
+      type: "SITE_TRANSFER",
 
-      productRef: product.ref,
+      productRef: sourceProduct.ref,
 
-      productName: product.name,
+      productName: sourceProduct.name,
 
-      transitRef: transit.ref,
+      from: fromIntervention.ref,
 
-      site: transit.site,
+      to: toIntervention.ref,
 
       quantity,
 
-      oldStock,
-
-      newStock,
-
-      oldTransitQuantity,
-
-      newTransitQuantity,
-
       action:
-        quantity === oldTransitQuantity
-          ? "Retour complet du transit vers l'entrepôt"
-          : "Retour partiel du transit vers l'entrepôt",
+        "Transfert de matériel entre sites",
+
+      oldStock: oldSourceStock,
+
+      newStock: sourceProduct.quantity,
     });
 
-    // =========================
-    // RÉPONSE
-    // =========================
+    /* =========================
+       RÉPONSE
+    ========================= */
 
     res.json({
       message:
-        quantity === oldTransitQuantity
-          ? "Transit retourné entièrement en stock"
-          : "Une partie du transit a été retournée en stock",
-
-      product,
-
-      transitRef,
-
-      site: transit.site,
-
-      returnedQuantity: quantity,
-
-      oldStock,
-
-      newStock,
-
-      oldTransitQuantity,
-
-      newTransitQuantity,
+        "Transfert effectué avec succès",
 
       ticket,
+
+      from: {
+        ref: fromIntervention.ref,
+        site: fromIntervention.site,
+        product: sourceProduct,
+        oldStock: oldSourceStock,
+        newStock: sourceProduct.quantity,
+      },
+
+      to: {
+        ref: toIntervention.ref,
+        site: toIntervention.site,
+        product: destinationProduct,
+        oldStock: oldDestinationStock,
+        newStock: destinationProduct.quantity,
+      },
     });
   } catch (error) {
-    console.error("Erreur retour transit :", error);
+    console.error(
+      "Erreur transfert matériel :",
+      error
+    );
 
     res.status(500).json({
       message:
-        "Erreur lors du retour du transit en stock",
+        "Erreur lors du transfert du matériel",
     });
   }
 };
+
+/* =========================================================
+   PRODUITS / STOCK
+========================================================= */
+
+/**
+ * GET /products
+ */
+const getProducts = async (req, res) => {
+  try {
+    const products = await Product.find()
+      .sort({ ref: 1 });
+
+    res.json(products);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la récupération des produits",
+    });
+  }
+};
+
+/**
+ * GET /products/:ref
+ */
+const getProduct = async (req, res) => {
+  try {
+    const product = await Product.findOne({
+      ref: req.params.ref,
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Produit introuvable",
+      });
+    }
+
+    res.json(product);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la récupération du produit",
+    });
+  }
+};
+
+/**
+ * POST /products
+ */
+const createProduct = async (req, res) => {
+  try {
+    const {
+      ref,
+      name,
+      quantity,
+      location,
+      enTransit,
+    } = req.body;
+
+    const product = await Product.create({
+      ref,
+      name,
+      quantity,
+      location,
+      enTransit,
+    });
+
+    res.status(201).json(product);
+  } catch (error) {
+    console.error(error);
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message:
+          "Cette référence existe déjà",
+      });
+    }
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la création du produit",
+    });
+  }
+};
+
+/**
+ * PUT /products/:ref
+ */
 const updateProduct = async (req, res) => {
   try {
-    const { name, ref, quantity, location, enTransit } = req.body;
+    const {
+      name,
+      ref,
+      quantity,
+      location,
+      enTransit,
+    } = req.body;
 
     const product = await Product.findOne({
       ref: req.params.ref,
@@ -340,7 +770,6 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    // On garde les anciennes valeurs pour le suivi
     const oldProduct = {
       ref: product.ref,
       name: product.name,
@@ -349,27 +778,43 @@ const updateProduct = async (req, res) => {
       enTransit: product.enTransit,
     };
 
-    // Si la référence change, on vérifie qu'elle n'existe pas déjà
     if (ref && ref !== product.ref) {
-      const existingProduct = await Product.findOne({ ref });
+      const existingProduct =
+        await Product.findOne({ ref });
 
       if (existingProduct) {
         return res.status(409).json({
-          message: "Cette référence existe déjà",
+          message:
+            "Cette référence existe déjà",
         });
       }
     }
 
-    product.name = name;
-    product.ref = ref;
-    product.quantity = quantity;
-    product.location = location;
-    product.enTransit = enTransit;
+    if (name !== undefined) {
+      product.name = name;
+    }
+
+    if (ref !== undefined) {
+      product.ref = ref;
+    }
+
+    if (quantity !== undefined) {
+      product.quantity = quantity;
+    }
+
+    if (location !== undefined) {
+      product.location = location;
+    }
+
+    if (enTransit !== undefined) {
+      product.enTransit = enTransit;
+    }
 
     await product.save();
 
     res.json({
-      message: "Produit modifié avec succès",
+      message:
+        "Produit modifié avec succès",
       oldProduct,
       newProduct: product,
     });
@@ -377,18 +822,26 @@ const updateProduct = async (req, res) => {
     console.error(error);
 
     res.status(500).json({
-      message: "Erreur lors de la modification du produit",
+      message:
+        "Erreur lors de la modification du produit",
     });
   }
 };
 
+/**
+ * POST /products/:ref/add
+ */
 const addStock = async (req, res) => {
   try {
     const { quantity } = req.body;
 
-    if (!Number.isInteger(quantity) || quantity <= 0) {
+    if (
+      !Number.isInteger(quantity) ||
+      quantity <= 0
+    ) {
       return res.status(400).json({
-        message: "La quantité doit être un entier supérieur à 0",
+        message:
+          "La quantité doit être un entier supérieur à 0",
       });
     }
 
@@ -408,30 +861,67 @@ const addStock = async (req, res) => {
 
     await product.save();
 
+    /*
+     * Ticket historique du mouvement.
+     */
+    const ticket = await Ticket.create({
+      type: "STOCK_ADD",
+
+      productRef: product.ref,
+
+      productName: product.name,
+
+      site: product.location,
+
+      quantity,
+
+      oldStock: oldQuantity,
+
+      newStock: product.quantity,
+
+      action: "Ajout de stock",
+    });
+
     res.json({
-      message: "Stock ajouté avec succès",
+      message:
+        "Stock ajouté avec succès",
+
       ref: product.ref,
+
       addedQuantity: quantity,
+
       oldQuantity,
+
       newQuantity: product.quantity,
+
       product,
+
+      ticket,
     });
   } catch (error) {
     console.error(error);
 
     res.status(500).json({
-      message: "Erreur lors de l'ajout du stock",
+      message:
+        "Erreur lors de l'ajout du stock",
     });
   }
 };
 
+/**
+ * POST /products/:ref/remove
+ */
 const removeStock = async (req, res) => {
   try {
     const { quantity } = req.body;
 
-    if (!Number.isInteger(quantity) || quantity <= 0) {
+    if (
+      !Number.isInteger(quantity) ||
+      quantity <= 0
+    ) {
       return res.status(400).json({
-        message: "La quantité doit être un entier supérieur à 0",
+        message:
+          "La quantité doit être un entier supérieur à 0",
       });
     }
 
@@ -458,38 +948,85 @@ const removeStock = async (req, res) => {
 
     await product.save();
 
+    /*
+     * Ticket historique du mouvement.
+     */
+    const ticket = await Ticket.create({
+      type: "STOCK_REMOVE",
+
+      productRef: product.ref,
+
+      productName: product.name,
+
+      site: product.location,
+
+      quantity,
+
+      oldStock: oldQuantity,
+
+      newStock: product.quantity,
+
+      action: "Retrait de stock",
+    });
+
     res.json({
-      message: "Stock retiré avec succès",
+      message:
+        "Stock retiré avec succès",
+
       ref: product.ref,
+
       removedQuantity: quantity,
+
       oldQuantity,
+
       newQuantity: product.quantity,
+
       product,
+
+      ticket,
     });
   } catch (error) {
     console.error(error);
 
     res.status(500).json({
-      message: "Erreur lors du retrait du stock",
-    });
-  }
-};
-const getProducts = async (req, res) => {
-  try {
-    const products = await Product.find().sort({ ref: 1 });
-
-    res.json(products);
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "Erreur lors de la récupération des produits",
+      message:
+        "Erreur lors du retrait du stock",
     });
   }
 };
 
-const getProduct = async (req, res) => {
+/* =========================================================
+   TRANSIT
+========================================================= */
+
+/**
+ * POST /products/:ref/send
+ */
+const sendToSite = async (req, res) => {
   try {
+    const { quantity, site } = req.body;
+
+    if (
+      !Number.isInteger(quantity) ||
+      quantity <= 0
+    ) {
+      return res.status(400).json({
+        message:
+          "La quantité doit être un entier supérieur à 0",
+      });
+    }
+
+    if (
+      !site ||
+      typeof site !== "string" ||
+      site.trim() === ""
+    ) {
+      return res.status(400).json({
+        message:
+          "Le site de destination est obligatoire",
+      });
+    }
+
     const product = await Product.findOne({
       ref: req.params.ref,
     });
@@ -500,52 +1037,445 @@ const getProduct = async (req, res) => {
       });
     }
 
-    res.json(product);
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "Erreur lors de la récupération du produit",
-    });
-  }
-};
-
-const createProduct = async (req, res) => {
-  try {
-    const { ref, name, quantity, location, enTransit } = req.body;
-
-    const product = await Product.create({
-      ref,
-      name,
-      quantity,
-      location,
-      enTransit,
-    });
-
-    res.status(201).json(product);
-  } catch (error) {
-    console.error(error);
-
-    if (error.code === 11000) {
-      return res.status(409).json({
-        message: "Cette référence existe déjà",
+    if (quantity > product.quantity) {
+      return res.status(400).json({
+        message: "Stock insuffisant",
+        stockDisponible: product.quantity,
       });
     }
 
+    const oldQuantity = product.quantity;
+
+    const oldEnTransit = [
+      ...product.enTransit,
+    ];
+
+    const transitRef =
+      generateTransitRef();
+
+    const newQuantity =
+      oldQuantity - quantity;
+
+    product.quantity = newQuantity;
+
+    product.enTransit.push({
+      ref: transitRef,
+      quantity,
+      site: site.trim(),
+    });
+
+    await product.save();
+
+    const ticket = await Ticket.create({
+      type: "TRANSIT_SEND",
+
+      productRef: product.ref,
+
+      productName: product.name,
+
+      transitRef,
+
+      site: site.trim(),
+
+      quantity,
+
+      oldStock: oldQuantity,
+
+      newStock: newQuantity,
+
+      action:
+        "Envoi du produit en transit vers un site",
+    });
+
+    res.json({
+      message:
+        `Envoi effectué vers ${site.trim()}. Il reste ${newQuantity} objets en stock.`,
+
+      ref: product.ref,
+
+      transitRef,
+
+      sentQuantity: quantity,
+
+      destination: site.trim(),
+
+      oldQuantity,
+
+      newQuantity,
+
+      oldEnTransit,
+
+      newEnTransit:
+        product.enTransit,
+
+      product,
+
+      ticket,
+    });
+  } catch (error) {
+    console.error(error);
+
     res.status(500).json({
-      message: "Erreur lors de la création du produit",
+      message:
+        "Erreur lors de l'envoi du produit vers le site",
     });
   }
 };
 
+/**
+ * POST /products/:ref/transit/:transitRef/return
+ */
+const returnTransit = async (req, res) => {
+  try {
+    const {
+      ref,
+      transitRef,
+    } = req.params;
+
+    const { quantity } = req.body;
+
+    if (
+      !Number.isInteger(quantity) ||
+      quantity <= 0
+    ) {
+      return res.status(400).json({
+        message:
+          "La quantité doit être un entier supérieur à 0",
+      });
+    }
+
+    const product = await Product.findOne({
+      ref,
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Produit introuvable",
+      });
+    }
+
+    const transitIndex =
+      product.enTransit.findIndex(
+        (transit) =>
+          transit.ref === transitRef
+      );
+
+    if (transitIndex === -1) {
+      return res.status(404).json({
+        message: "Transit introuvable",
+        transitRef,
+      });
+    }
+
+    const transit =
+      product.enTransit[transitIndex];
+
+    if (quantity > transit.quantity) {
+      return res.status(400).json({
+        message:
+          "La quantité retournée dépasse la quantité en transit",
+
+        quantityEnTransit:
+          transit.quantity,
+
+        quantityDemandee:
+          quantity,
+      });
+    }
+
+    const oldStock =
+      product.quantity;
+
+    const oldTransitQuantity =
+      transit.quantity;
+
+    product.quantity += quantity;
+
+    if (
+      quantity === transit.quantity
+    ) {
+      product.enTransit.splice(
+        transitIndex,
+        1
+      );
+    } else {
+      transit.quantity -= quantity;
+    }
+
+    const newStock =
+      product.quantity;
+
+    const newTransitQuantity =
+      quantity === oldTransitQuantity
+        ? 0
+        : transit.quantity;
+
+    await product.save();
+
+    const ticket =
+      await Ticket.create({
+        type: "TRANSIT_RETURN",
+
+        productRef: product.ref,
+
+        productName: product.name,
+
+        transitRef: transit.ref,
+
+        site: transit.site,
+
+        quantity,
+
+        oldStock,
+
+        newStock,
+
+        oldTransitQuantity,
+
+        newTransitQuantity,
+
+        action:
+          quantity === oldTransitQuantity
+            ? "Retour complet du transit vers l'entrepôt"
+            : "Retour partiel du transit vers l'entrepôt",
+      });
+
+    res.json({
+      message:
+        quantity === oldTransitQuantity
+          ? "Transit retourné entièrement en stock"
+          : "Une partie du transit a été retournée en stock",
+
+      product,
+
+      transitRef,
+
+      site: transit.site,
+
+      returnedQuantity: quantity,
+
+      oldStock,
+
+      newStock,
+
+      oldTransitQuantity,
+
+      newTransitQuantity,
+
+      ticket,
+    });
+  } catch (error) {
+    console.error(
+      "Erreur retour transit :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors du retour du transit en stock",
+    });
+  }
+};
+
+/**
+ * DELETE /products/:ref/transit/:transitRef
+ */
+const deleteTransit = async (req, res) => {
+  try {
+    const {
+      ref,
+      transitRef,
+    } = req.params;
+
+    const product = await Product.findOne({
+      ref,
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Produit introuvable",
+      });
+    }
+
+    const transitIndex =
+      product.enTransit.findIndex(
+        (transit) =>
+          transit.ref === transitRef
+      );
+
+    if (transitIndex === -1) {
+      return res.status(404).json({
+        message: "Transit introuvable",
+        transitRef,
+      });
+    }
+
+    const transit =
+      product.enTransit[transitIndex];
+
+    const oldQuantity =
+      product.quantity;
+
+    product.quantity +=
+      transit.quantity;
+
+    product.enTransit.splice(
+      transitIndex,
+      1
+    );
+
+    await product.save();
+
+    const ticket =
+      await Ticket.create({
+        type: "TRANSIT_RETURN",
+
+        productRef: product.ref,
+
+        productName: product.name,
+
+        transitRef: transit.ref,
+
+        site: transit.site,
+
+        quantity: transit.quantity,
+
+        oldStock: oldQuantity,
+
+        newStock: product.quantity,
+
+        oldTransitQuantity:
+          transit.quantity,
+
+        newTransitQuantity: 0,
+
+        action:
+          "Suppression du transit et retour en stock",
+      });
+
+    res.json({
+      message:
+        `Transit ${transitRef} supprimé. ${transit.quantity} objets ont été remis en stock.`,
+
+      ref: product.ref,
+
+      transitRef: transit.ref,
+
+      site: transit.site,
+
+      returnedQuantity:
+        transit.quantity,
+
+      oldQuantity,
+
+      newQuantity:
+        product.quantity,
+
+      remainingTransits:
+        product.enTransit,
+
+      product,
+
+      ticket,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la suppression du transit",
+    });
+  }
+};
+
+/* =========================================================
+   TICKETS
+========================================================= */
+
+/**
+ * GET /tickets
+ *
+ * Tous les tickets.
+ */
+const getTickets = async (req, res) => {
+  try {
+    const tickets = await Ticket.find()
+      .sort({ createdAt: -1 });
+
+    res.json(tickets);
+  } catch (error) {
+    console.error(
+      "Erreur récupération tickets :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la récupération des tickets",
+    });
+  }
+};
+
+/**
+ * GET /tickets/:id
+ *
+ * Ticket unique.
+ */
+const getTicket = async (req, res) => {
+  try {
+    const ticket =
+      await Ticket.findById(req.params.id);
+
+    if (!ticket) {
+      return res.status(404).json({
+        message: "Ticket introuvable",
+      });
+    }
+
+    res.json(ticket);
+  } catch (error) {
+    console.error(
+      "Erreur récupération ticket :",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Erreur lors de la récupération du ticket",
+    });
+  }
+};
+
+/* =========================================================
+   EXPORT
+========================================================= */
+
 module.exports = {
+  /* Interventions */
+  getInterventions,
+  getIntervention,
+  createIntervention,
+  updateIntervention,
+  closeIntervention,
+  deleteIntervention,
+  getInterventionProducts,
+  getInterventionTickets,
+  transferProduct,
+
+  /* Products */
   getProducts,
   getProduct,
-  returnTransit,
   createProduct,
-  addStock,
-  deleteTransit,
-  removeStock,
   updateProduct,
+  addStock,
+  removeStock,
+
+  /* Transit */
   sendToSite,
+  returnTransit,
+  deleteTransit,
+
+  /* Tickets */
+  getTickets,
+  getTicket,
 };
