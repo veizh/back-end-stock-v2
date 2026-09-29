@@ -499,101 +499,129 @@ const transferProduct = async (req, res) => {
     }
 
     /* =========================
-       VÉRIFICATION STATUT
+       STATUTS
     ========================= */
 
-    if (fromIntervention.status === "closed") {
+    if (fromIntervention.status !== "open") {
       return res.status(400).json({
         message:
-          "Impossible de transférer du matériel depuis une intervention clôturée",
+          "Impossible de transférer depuis une intervention clôturée",
       });
     }
 
-    if (toIntervention.status === "closed") {
+    if (toIntervention.status !== "open") {
       return res.status(400).json({
         message:
-          "Impossible de transférer du matériel vers une intervention clôturée",
+          "Impossible de transférer vers une intervention clôturée",
       });
     }
 
     /* =========================
-       PRODUIT SOURCE
+       PRODUIT
     ========================= */
 
-    const sourceProduct = await Product.findOne({
+    const product = await Product.findOne({
       ref: productRef,
-      location: fromIntervention.site,
     });
 
-    if (!sourceProduct) {
+    if (!product) {
       return res.status(404).json({
-        message:
-          "Produit introuvable sur le site source",
-        productRef,
-        site: fromIntervention.site,
+        message: "Produit introuvable",
       });
     }
 
     /* =========================
-       STOCK SOURCE
+       STOCK DISPONIBLE SUR
+       L'INTERVENTION SOURCE
     ========================= */
 
-    if (quantity > sourceProduct.quantity) {
+    const sourceSite =
+      fromIntervention.site;
+
+    const destinationSite =
+      toIntervention.site;
+
+    const sourceTransit =
+      product.enTransit.filter(
+        (transit) =>
+          transit.site === sourceSite
+      );
+
+    const stockSurSite =
+      sourceTransit.reduce(
+        (total, transit) =>
+          total + transit.quantity,
+        0
+      );
+
+    if (quantity > stockSurSite) {
       return res.status(400).json({
-        message: "Stock insuffisant sur le site source",
-        stockDisponible: sourceProduct.quantity,
+        message:
+          "Stock insuffisant sur l'intervention source",
+        stockDisponible: stockSurSite,
         quantityDemandee: quantity,
+        site: sourceSite,
       });
     }
 
     /* =========================
-       PRODUIT DESTINATION
+       RETRAIT DU SITE SOURCE
     ========================= */
 
-    let destinationProduct =
-      await Product.findOne({
-        ref: productRef,
-        location: toIntervention.site,
-      });
+    let remaining =
+      quantity;
 
-    /*
-     * Si le produit n'existe pas encore
-     * sur le site destination, on le crée.
-     */
-    if (!destinationProduct) {
-      destinationProduct = await Product.create({
-        ref: sourceProduct.ref,
-        name: sourceProduct.name,
-        quantity: 0,
-        location: toIntervention.site,
-        enTransit: [],
-      });
+    for (
+      let i = 0;
+      i < product.enTransit.length &&
+      remaining > 0;
+      i++
+    ) {
+      const transit =
+        product.enTransit[i];
+
+      if (
+        transit.site !== sourceSite ||
+        transit.quantity <= 0
+      ) {
+        continue;
+      }
+
+      const removeQuantity =
+        Math.min(
+          transit.quantity,
+          remaining
+        );
+
+      transit.quantity -=
+        removeQuantity;
+
+      remaining -=
+        removeQuantity;
     }
 
     /* =========================
-       ANCIENNES VALEURS
+       SUPPRESSION DES TRANSITS
+       VIDES
     ========================= */
 
-    const oldSourceStock =
-      sourceProduct.quantity;
-
-    const oldDestinationStock =
-      destinationProduct.quantity;
+    product.enTransit =
+      product.enTransit.filter(
+        (transit) =>
+          transit.quantity > 0
+      );
 
     /* =========================
-       TRANSFERT
+       AJOUT AU SITE DESTINATION
     ========================= */
 
-    sourceProduct.quantity -= quantity;
+    product.enTransit.push({
+      ref: generateTransitRef(),
+      quantity,
+      site: destinationSite,
+    });
 
-    destinationProduct.quantity += quantity;
-
-    /* =========================
-       SAUVEGARDE
-    ========================= */
-
-    await sourceProduct.save();
-    await destinationProduct.save();
+    await product.save();
 
     /* =========================
        TICKET
@@ -602,22 +630,20 @@ const transferProduct = async (req, res) => {
     const ticket = await Ticket.create({
       type: "SITE_TRANSFER",
 
-      productRef: sourceProduct.ref,
+      productRef: product.ref,
 
-      productName: sourceProduct.name,
+      productName: product.name,
 
       from: fromIntervention.ref,
 
       to: toIntervention.ref,
 
+      site: destinationSite,
+
       quantity,
 
       action:
-        "Transfert de matériel entre sites",
-
-      oldStock: oldSourceStock,
-
-      newStock: sourceProduct.quantity,
+        "Transfert de matériel entre interventions",
     });
 
     /* =========================
@@ -628,23 +654,27 @@ const transferProduct = async (req, res) => {
       message:
         "Transfert effectué avec succès",
 
-      ticket,
+      productRef: product.ref,
 
       from: {
-        ref: fromIntervention.ref,
-        site: fromIntervention.site,
-        product: sourceProduct,
-        oldStock: oldSourceStock,
-        newStock: sourceProduct.quantity,
+        intervention:
+          fromIntervention.ref,
+        site: sourceSite,
+        quantityTransferred:
+          quantity,
       },
 
       to: {
-        ref: toIntervention.ref,
-        site: toIntervention.site,
-        product: destinationProduct,
-        oldStock: oldDestinationStock,
-        newStock: destinationProduct.quantity,
+        intervention:
+          toIntervention.ref,
+        site: destinationSite,
+        quantityReceived:
+          quantity,
       },
+
+      ticket,
+
+      product,
     });
   } catch (error) {
     console.error(
@@ -658,7 +688,6 @@ const transferProduct = async (req, res) => {
     });
   }
 };
-
 /* =========================================================
    PRODUITS / STOCK
 ========================================================= */
