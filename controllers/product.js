@@ -362,8 +362,10 @@ const getInterventionProducts = async (req, res) => {
  */
 const getInterventionTickets = async (req, res) => {
   try {
+    const interventionRef = req.params.ref;
+
     const intervention = await Intervention.findOne({
-      ref: req.params.ref,
+      ref: interventionRef,
     });
 
     if (!intervention) {
@@ -374,12 +376,21 @@ const getInterventionTickets = async (req, res) => {
 
     const tickets = await Ticket.find({
       $or: [
+        { interventionRef: intervention.ref },
         { from: intervention.ref },
         { to: intervention.ref },
       ],
     }).sort({ createdAt: -1 });
 
-    res.json(tickets);
+    res.json({
+      intervention: {
+        ref: intervention.ref,
+        name: intervention.name,
+        client: intervention.client,
+        site: intervention.site,
+      },
+      tickets,
+    });
   } catch (error) {
     console.error(
       "Erreur récupération tickets intervention :",
@@ -388,7 +399,7 @@ const getInterventionTickets = async (req, res) => {
 
     res.status(500).json({
       message:
-        "Erreur lors de la récupération des tickets",
+        "Erreur lors de la récupération des tickets de l'intervention",
     });
   }
 };
