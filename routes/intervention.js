@@ -39,7 +39,7 @@ router.put("/:ref", updateIntervention);
  * POST /interventions/:ref/close
  * Clôture une intervention
  */
-router.post("/:ref/close", closeIntervention);
+router.patch("/:ref/close", closeIntervention);
 
 /*
  * GET /interventions/:ref/tickets
